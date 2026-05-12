@@ -13,34 +13,38 @@ interface InicioViewProps {
   onOpenCaja: (amount: number) => void;
   onCloseCaja: () => void;
   expenses: FixedExpense[];
+  transactions: any[];
 }
 
-export function InicioView({ isCajaOpen, onOpenCaja, onCloseCaja, expenses }: InicioViewProps) {
+export function InicioView({ isCajaOpen, onOpenCaja, onCloseCaja, expenses, transactions }: InicioViewProps) {
   const [showOpenModal, setShowOpenModal] = useState(false);
   const [showClosureModal, setShowClosureModal] = useState(false);
-  const [openingAmount, setOpeningAmount] = useState('');
+  const [openingAmount, setOpeningAmount] = useState('0');
 
-  // Estos datos son de ejemplo para el resumen. 
-  // En el futuro se conectarán a tus ventas reales.
-  const mockRecentSales = [
-    { id: '1', time: 'Hace 5 min', total: 45.99, items: 1, details: ['1x Vino Tinto Reserva'] },
-    { id: '2', time: 'Hace 12 min', total: 124.50, items: 3, details: ['2x Vino Blanco Seco', '1x Champagne Brut'] },
-    { id: '3', time: 'Hace 28 min', total: 8.50, items: 1, details: ['1x Cerveza Artesanal IPA'] },
-    { id: '4', time: 'Hace 1 hora', total: 65.00, items: 2, details: ['2x Vino Blanco Seco'] },
-  ];
-
-  const displaySales = isCajaOpen ? mockRecentSales : [];
+  // Convertimos transacciones reales a ventas recientes (últimas 5)
+  const recentSales = transactions.slice(0, 5).map(t => ({
+    id: t.id,
+    time: t.time,
+    total: t.total,
+    items: t.items?.reduce((sum: number, i: any) => sum + i.quantity, 0) || 0,
+    details: t.items?.map((i: any) => `${i.quantity}x ${i.name}`) || []
+  }));
+  
+  const displaySales = isCajaOpen ? recentSales : [];
+  const ventasHoy = isCajaOpen ? transactions.reduce((sum, t) => sum + t.total, 0) : 0;
+  const ticketsHoy = isCajaOpen ? transactions.length : 0;
+  const promedio = ticketsHoy > 0 ? (ventasHoy / ticketsHoy).toFixed(2) : '0.00';
 
   // Cálculos para la tarjeta de Gastos Fijos
   const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
-  const mockMonthlyRevenue = 320000; // En el futuro será calculado con ventas reales
+  const mockMonthlyRevenue = 0; // En el futuro será calculado con ventas reales
   const coveragePercentage = totalExpenses > 0 ? Math.min(100, (mockMonthlyRevenue / totalExpenses) * 100) : 100;
   const isCovered = mockMonthlyRevenue >= totalExpenses;
 
   const handleConfirmOpen = () => {
     onOpenCaja(Number(openingAmount) || 0);
     setShowOpenModal(false);
-    setOpeningAmount('');
+    setOpeningAmount('0');
     toast.success('Caja abierta exitosamente');
   };
 
@@ -97,9 +101,9 @@ export function InicioView({ isCajaOpen, onOpenCaja, onCloseCaja, expenses }: In
             </div>
             <h3 className="text-gray-400 font-medium">Ventas de Hoy</h3>
           </div>
-          <p className="text-white text-3xl font-bold">${isCajaOpen ? '243.99' : '0.00'}</p>
+          <p className="text-white text-3xl font-bold">${ventasHoy.toFixed(2)}</p>
           <p className={`${isCajaOpen ? 'text-green-500' : 'text-gray-500'} text-sm mt-2 flex items-center gap-1`}>
-            {isCajaOpen ? '+12% vs ayer' : 'Sin operaciones'}
+            {isCajaOpen && ticketsHoy > 0 ? 'En curso' : 'Sin operaciones'}
           </p>
         </div>
 
@@ -110,8 +114,8 @@ export function InicioView({ isCajaOpen, onOpenCaja, onCloseCaja, expenses }: In
             </div>
             <h3 className="text-gray-400 font-medium">Tickets Emitidos</h3>
           </div>
-          <p className="text-white text-3xl font-bold">{isCajaOpen ? '24' : '0'}</p>
-          <p className="text-gray-500 text-sm mt-2">{isCajaOpen ? 'Promedio: $10.16/ticket' : 'Sin actividad'}</p>
+          <p className="text-white text-3xl font-bold">{ticketsHoy}</p>
+          <p className="text-gray-500 text-sm mt-2">{isCajaOpen && ticketsHoy > 0 ? `Promedio: $${promedio}/ticket` : 'Sin actividad'}</p>
         </div>
       </div>
 

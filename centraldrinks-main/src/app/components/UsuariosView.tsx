@@ -10,10 +10,7 @@ interface AppUser {
   role: 'admin' | 'cajero';
 }
 
-const MOCK_USERS: AppUser[] = [
-  { id: '1', name: 'Administrador Principal', username: 'admin', password: 'admin123', role: 'admin' },
-  { id: '2', name: 'Cajero Turno Mañana', username: 'cajero', password: 'caja123', role: 'cajero' },
-];
+const MOCK_USERS: AppUser[] = [];
 
 export function UsuariosView() {
   const [users, setUsers] = useState<AppUser[]>(MOCK_USERS);

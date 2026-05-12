@@ -6,44 +6,44 @@ export function EstadisticasView() {
 
   // Datos mockeados para el ejemplo. Luego se pueden calcular de transacciones reales.
   const dataSemanal = {
-    revenue: 115000.00,
-    efectivo: 45000.00,
-    virtual: 70000.00,
-    costoStock: 30000.00,
-    gastos: 63750.00, // Proporción de 1 semana aprox
-    topProduct: 'Vino Tinto Reserva',
-    growth: '+12.5%',
+    revenue: 0,
+    efectivo: 0,
+    virtual: 0,
+    costoStock: 0,
+    gastos: 0,
+    topProduct: '-',
+    growth: '0%',
     chart: [
-      { label: 'Lun', value: 12150 },
-      { label: 'Mar', value: 14040 },
-      { label: 'Mié', value: 10260 },
-      { label: 'Jue', value: 16470 },
-      { label: 'Vie', value: 22950 },
-      { label: 'Sáb', value: 29700 },
-      { label: 'Dom', value: 9430 },
+      { label: 'Lun', value: 0 },
+      { label: 'Mar', value: 0 },
+      { label: 'Mié', value: 0 },
+      { label: 'Jue', value: 0 },
+      { label: 'Vie', value: 0 },
+      { label: 'Sáb', value: 0 },
+      { label: 'Dom', value: 0 },
     ]
   };
 
   const dataMensual = {
-    revenue: 450000.00,
-    efectivo: 150000.00,
-    virtual: 300000.00,
-    costoStock: 120000.00,
-    gastos: 255000.00, // Total de gastos fijos configurados
-    topProduct: 'Cerveza Artesanal IPA',
-    growth: '+8.2%',
+    revenue: 0,
+    efectivo: 0,
+    virtual: 0,
+    costoStock: 0,
+    gastos: 0,
+    topProduct: '-',
+    growth: '0%',
     chart: [
-      { label: 'Sem 1', value: 100000 },
-      { label: 'Sem 2', value: 115000 },
-      { label: 'Sem 3', value: 105000 },
-      { label: 'Sem 4', value: 130000 },
+      { label: 'Sem 1', value: 0 },
+      { label: 'Sem 2', value: 0 },
+      { label: 'Sem 3', value: 0 },
+      { label: 'Sem 4', value: 0 },
     ]
   };
 
   const currentData = period === 'semanal' ? dataSemanal : dataMensual;
-  const maxChartValue = Math.max(...currentData.chart.map(d => d.value));
+  const maxChartValue = Math.max(...currentData.chart.map(d => d.value), 1);
   const balanceNeto = currentData.revenue - currentData.costoStock - currentData.gastos;
-  const margenPorcentaje = (balanceNeto / currentData.revenue) * 100;
+  const margenPorcentaje = currentData.revenue > 0 ? (balanceNeto / currentData.revenue) * 100 : 0;
 
   return (
     <div className="flex-1 p-8 overflow-y-auto">

@@ -23,16 +23,7 @@ interface CartItem {
   quantity: number;
 }
 
-const MOCK_PRODUCTS: Product[] = [
-  { id: '1', name: 'Vino Tinto Reserva', price: 45.99, cost: 25.00, category: 'Vinos', image: 'https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?w=400', stock: 15, minStock: 10 },
-  { id: '2', name: 'Cerveza Artesanal IPA', price: 8.50, cost: 4.00, category: 'Cervezas', image: 'https://images.unsplash.com/photo-1608270586620-248524c67de9?w=400', stock: 45, minStock: 20 },
-  { id: '3', name: 'Whisky Single Malt', price: 89.99, cost: 50.00, category: 'Espirituosas', image: 'https://images.unsplash.com/photo-1527281400683-1aae777175f8?w=400', stock: 8, minStock: 5 },
-  { id: '4', name: 'Champagne Brut', price: 65.00, cost: 35.00, category: 'Vinos', image: 'https://images.unsplash.com/photo-1547595628-c61a29f496f0?w=400', stock: 12, minStock: 10 },
-  { id: '5', name: 'Gin Premium', price: 42.50, cost: 20.00, category: 'Espirituosas', image: 'https://images.unsplash.com/photo-1551538827-9c037cb4f32a?w=400', stock: 20, minStock: 10 },
-  { id: '6', name: 'Cerveza Lager', price: 6.00, cost: 3.00, category: 'Cervezas', image: 'https://images.unsplash.com/photo-1535958636474-b021ee887b13?w=400', stock: 60, minStock: 24 },
-  { id: '7', name: 'Ron Añejo', price: 38.00, cost: 18.00, category: 'Espirituosas', image: 'https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=400', stock: 18, minStock: 8 },
-  { id: '8', name: 'Vino Blanco Seco', price: 32.00, cost: 15.00, category: 'Vinos', image: 'https://images.unsplash.com/photo-1474722883778-792e7990302f?w=400', stock: 22, minStock: 10 },
-];
+const MOCK_PRODUCTS: Product[] = [];
 
 interface VentasViewProps {
   isCajaOpen: boolean;
@@ -41,9 +32,10 @@ interface VentasViewProps {
     name: string;
     surcharge: number;
   }[];
+  onAddTransaction: (transaction: any) => void;
 }
 
-export function VentasView({ isCajaOpen, paymentMethods }: VentasViewProps) {
+export function VentasView({ isCajaOpen, paymentMethods, onAddTransaction }: VentasViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('Todos');
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
@@ -91,9 +83,32 @@ export function VentasView({ isCajaOpen, paymentMethods }: VentasViewProps) {
     setShowPaymentModal(true);
   };
 
-  const handleConfirmPayment = (payments: { finalAmount: number }[]) => {
+  const handleConfirmPayment = (payments: { finalAmount: number, methodId: string }[]) => {
     // Sumamos los montos finales ya calculados (incluyendo recargos)
     const finalTotal = payments.reduce((sum, p) => sum + p.finalAmount, 0);
+
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    onAddTransaction({
+      id: Math.random().toString(36).substr(2, 9),
+      date: dateStr,
+      time: timeStr,
+      total: finalTotal,
+      payments: payments.map(p => {
+        const method = paymentMethods.find(m => m.id === p.methodId);
+        return {
+          type: method ? method.name : 'Virtual',
+          amount: p.finalAmount
+        };
+      }),
+      items: cartItems.map(item => ({
+        name: item.name,
+        quantity: item.quantity,
+        total: item.price * item.quantity
+      }))
+    });
 
     toast.success('Venta procesada exitosamente', {
       description: `Total cobrado: $${finalTotal.toFixed(2)}`,

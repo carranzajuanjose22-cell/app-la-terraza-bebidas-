@@ -1,57 +1,21 @@
-import { useState, Fragment, useEffect } from 'react';
+import { useState, Fragment } from 'react';
 import { Lock, Calendar, Clock, Unlock, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 
-interface Transaction {
+export interface Transaction {
   id: string;
   date: string;
   time: string;
   total: number;
-  payments: { type: 'efectivo' | 'transferencia'; amount: number }[];
+  payments: { type: string; amount: number }[];
+  items?: {
+    name: string;
+    quantity: number;
+    total: number;
+  }[];
 }
 
-const MOCK_TRANSACTIONS: Transaction[] = [
-  {
-    id: '1',
-    date: '2026-04-28',
-    time: '14:35',
-    total: 124.50,
-    payments: [{ type: 'efectivo', amount: 124.50 }]
-  },
-  {
-    id: '2',
-    date: '2026-04-28',
-    time: '14:12',
-    total: 89.99,
-    payments: [{ type: 'transferencia', amount: 89.99 }]
-  },
-  {
-    id: '3',
-    date: '2026-04-28',
-    time: '13:45',
-    total: 156.00,
-    payments: [
-      { type: 'efectivo', amount: 100.00 },
-      { type: 'transferencia', amount: 56.00 }
-    ]
-  },
-  {
-    id: '4',
-    date: '2026-04-28',
-    time: '13:20',
-    total: 42.50,
-    payments: [{ type: 'efectivo', amount: 42.50 }]
-  },
-  {
-    id: '5',
-    date: '2026-04-28',
-    time: '12:55',
-    total: 198.75,
-    payments: [{ type: 'transferencia', amount: 198.75 }]
-  },
-];
-
-interface CajaCerrada {
+export interface CajaCerrada {
   id: string;
   date: string;
   time: string;
@@ -60,13 +24,12 @@ interface CajaCerrada {
   totalTransferencia: number;
   totalIngresos: number;
   transactionsCount: number;
+  soldItems: {
+    name: string;
+    quantity: number;
+    total: number;
+  }[];
 }
-
-const MOCK_CAJAS_CERRADAS: CajaCerrada[] = [
-  { id: '1', date: '2026-04-27', time: '23:15', initialCash: 100, totalEfectivo: 450.50, totalTransferencia: 320.00, totalIngresos: 770.50, transactionsCount: 24 },
-  { id: '2', date: '2026-04-26', time: '22:50', initialCash: 100, totalEfectivo: 380.00, totalTransferencia: 410.00, totalIngresos: 790.00, transactionsCount: 28 },
-  { id: '3', date: '2026-04-25', time: '23:30', initialCash: 150, totalEfectivo: 520.25, totalTransferencia: 290.00, totalIngresos: 810.25, transactionsCount: 31 },
-];
 
 interface CajaViewProps {
   role?: 'admin' | 'cajero';
@@ -74,22 +37,28 @@ interface CajaViewProps {
   onOpenCaja: (amount: number) => void;
   onCloseCaja: () => void;
   initialCash: number;
+  transactions: Transaction[];
+  setTransactions: (t: Transaction[]) => void;
+  cajasCerradas: CajaCerrada[];
+  setCajasCerradas: (c: CajaCerrada[]) => void;
 }
 
-export function CajaView({ role = 'admin', isCajaOpen, onOpenCaja, onCloseCaja, initialCash }: CajaViewProps) {
-  const [transactions, setTransactions] = useState<Transaction[]>(MOCK_TRANSACTIONS);
+export function CajaView({ 
+  role = 'admin', 
+  isCajaOpen, 
+  onOpenCaja, 
+  onCloseCaja, 
+  initialCash,
+  transactions,
+  setTransactions,
+  cajasCerradas,
+  setCajasCerradas
+}: CajaViewProps) {
   const [showClosureModal, setShowClosureModal] = useState(false);
   const [showOpenModal, setShowOpenModal] = useState(false);
-  const [openingAmount, setOpeningAmount] = useState('');
+  const [openingAmount, setOpeningAmount] = useState('0');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [searchDate, setSearchDate] = useState('');
-
-  // Limpiar movimientos al cerrar la caja (arranca de cero al abrir)
-  useEffect(() => {
-    if (!isCajaOpen) {
-      setTransactions([]);
-    }
-  }, [isCajaOpen]);
 
   const totalIngresos = transactions.reduce((sum, t) => sum + t.total, 0);
   const totalEfectivo = transactions.reduce((sum, t) =>
@@ -110,11 +79,11 @@ export function CajaView({ role = 'admin', isCajaOpen, onOpenCaja, onCloseCaja, 
   const handleConfirmOpen = () => {
     onOpenCaja(Number(openingAmount) || 0);
     setShowOpenModal(false);
-    setOpeningAmount('');
+    setOpeningAmount('0');
     toast.success('Caja abierta exitosamente');
   };
 
-  const filteredCajas = searchDate ? MOCK_CAJAS_CERRADAS.filter(caja => caja.date === searchDate) : MOCK_CAJAS_CERRADAS;
+  const filteredCajas = searchDate ? cajasCerradas.filter(caja => caja.date === searchDate) : cajasCerradas;
 
   return (
     <div className="flex-1 p-8 overflow-y-auto relative">
@@ -245,6 +214,38 @@ export function CajaView({ role = 'admin', isCajaOpen, onOpenCaja, onCloseCaja, 
                                 <p className="text-white font-bold text-lg">{caja.transactionsCount}</p>
                               </div>
                             </div>
+
+                            <div className="mt-6">
+                              <h5 className="text-white font-medium mb-3">Productos Vendidos en la Jornada</h5>
+                              <div className="bg-[#1a1a1a] rounded-lg border border-[#2a2a2a] overflow-hidden">
+                                <table className="w-full text-sm">
+                                  <thead className="bg-[#2a2a2a]">
+                                    <tr>
+                                      <th className="text-left text-gray-400 p-3 font-medium">Producto</th>
+                                      <th className="text-center text-gray-400 p-3 font-medium">Cantidad</th>
+                                      <th className="text-right text-gray-400 p-3 font-medium">Total</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {caja.soldItems && caja.soldItems.length > 0 ? (
+                                      caja.soldItems.map((item, idx) => (
+                                        <tr key={idx} className="border-t border-[#2a2a2a]">
+                                          <td className="p-3 text-white">{item.name}</td>
+                                          <td className="p-3 text-center text-gray-400">{item.quantity}</td>
+                                          <td className="p-3 text-right text-white font-medium">${item.total.toFixed(2)}</td>
+                                        </tr>
+                                      ))
+                                    ) : (
+                                      <tr>
+                                        <td colSpan={3} className="p-4 text-center text-gray-500">
+                                          No hay detalles de productos para esta caja.
+                                        </td>
+                                      </tr>
+                                    )}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
                           </td>
                         </tr>
                       )}
@@ -273,38 +274,84 @@ export function CajaView({ role = 'admin', isCajaOpen, onOpenCaja, onCloseCaja, 
                   <th className="text-left text-gray-400 p-4">Hora</th>
                   <th className="text-left text-gray-400 p-4">Método de Pago</th>
                   <th className="text-right text-gray-400 p-4">Total</th>
+                  <th className="text-right text-gray-400 p-4">Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {isCajaOpen && transactions.length > 0 ? (
                   transactions.map(t => (
-                    <tr key={t.id} className="border-b border-[#2a2a2a] hover:bg-[#2a2a2a] transition-colors">
-                      <td className="p-4">
-                        <div className="flex items-center gap-2 text-white">
-                          <Clock size={16} className="text-gray-400" />
-                          {t.time}
-                        </div>
-                      </td>
-                      <td className="p-4">
-                        <div className="flex gap-2">
-                          {t.payments.map((payment, idx) => (
-                            <span
-                              key={idx}
-                              className={`px-3 py-1 rounded-full text-sm ${
-                                payment.type === 'efectivo'
-                                  ? 'bg-green-500/20 text-green-400'
-                                  : 'bg-blue-500/20 text-blue-400'
-                              }`}
-                            >
-                              {payment.type === 'efectivo' ? 'Efectivo' : 'Virtual'}: ${payment.amount.toFixed(2)}
-                            </span>
-                          ))}
-                        </div>
-                      </td>
-                      <td className="p-4 text-right text-white font-bold">
-                        ${t.total.toFixed(2)}
-                      </td>
-                    </tr>
+                    <Fragment key={t.id}>
+                      <tr className={`border-b border-[#2a2a2a] hover:bg-[#2a2a2a] transition-colors ${expandedId === t.id ? 'bg-[#2a2a2a]' : ''}`}>
+                        <td className="p-4">
+                          <div className="flex items-center gap-2 text-white">
+                            <Clock size={16} className="text-gray-400" />
+                            {t.time}
+                          </div>
+                        </td>
+                        <td className="p-4">
+                          <div className="flex gap-2">
+                            {t.payments.map((payment, idx) => (
+                              <span
+                                key={idx}
+                                className={`px-3 py-1 rounded-full text-sm ${
+                                  payment.type.toLowerCase().includes('efectivo')
+                                    ? 'bg-green-500/20 text-green-400'
+                                    : 'bg-blue-500/20 text-blue-400'
+                                }`}
+                              >
+                                {payment.type}: ${payment.amount.toFixed(2)}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="p-4 text-right text-white font-bold">
+                          ${t.total.toFixed(2)}
+                        </td>
+                        <td className="p-4 text-right">
+                          <button
+                            onClick={() => setExpandedId(expandedId === t.id ? null : t.id)}
+                            className="text-gray-400 hover:text-white transition-colors p-2"
+                          >
+                            <Eye size={20} />
+                          </button>
+                        </td>
+                      </tr>
+                      {expandedId === t.id && (
+                        <tr className="border-b border-[#2a2a2a] bg-[#121212]">
+                          <td colSpan={4} className="p-6">
+                            <h5 className="text-white font-medium mb-3">Detalle de la Transacción</h5>
+                            <div className="bg-[#1a1a1a] rounded-lg border border-[#2a2a2a] overflow-hidden">
+                              <table className="w-full text-sm">
+                                <thead className="bg-[#2a2a2a]">
+                                  <tr>
+                                    <th className="text-left text-gray-400 p-3 font-medium">Producto</th>
+                                    <th className="text-center text-gray-400 p-3 font-medium">Cantidad</th>
+                                    <th className="text-right text-gray-400 p-3 font-medium">Total</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {t.items && t.items.length > 0 ? (
+                                    t.items.map((item, idx) => (
+                                      <tr key={idx} className="border-t border-[#2a2a2a]">
+                                        <td className="p-3 text-white">{item.name}</td>
+                                        <td className="p-3 text-center text-gray-400">{item.quantity}</td>
+                                        <td className="p-3 text-right text-white font-medium">${item.total.toFixed(2)}</td>
+                                      </tr>
+                                    ))
+                                  ) : (
+                                    <tr>
+                                      <td colSpan={3} className="p-4 text-center text-gray-500">
+                                        Detalle de productos no disponible.
+                                      </td>
+                                    </tr>
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   ))
                 ) : (
                   <tr>
@@ -330,7 +377,9 @@ export function CajaView({ role = 'admin', isCajaOpen, onOpenCaja, onCloseCaja, 
               <div className="bg-[#2a2a2a] rounded-xl p-6 space-y-4">
                 <div className="flex items-center justify-between pb-4 border-b border-[#333]">
                   <span className="text-gray-400">Fecha:</span>
-                  <span className="text-white font-bold">28 de Abril, 2026</span>
+                  <span className="text-white font-bold">
+                    {new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  </span>
                 </div>
 
                 <div className="flex items-center justify-between pb-4 border-b border-[#333]">

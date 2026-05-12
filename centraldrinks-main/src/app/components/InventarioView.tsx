@@ -12,18 +12,7 @@ interface Product {
   minStock: number;
 }
 
-const MOCK_INVENTORY: Product[] = [
-  { id: '1', name: 'Vino Tinto Reserva', price: 45.99, cost: 25.00, category: 'Vinos', stock: 15, minStock: 10 },
-  { id: '2', name: 'Cerveza Artesanal IPA', price: 8.50, cost: 4.00, category: 'Cervezas', stock: 45, minStock: 20 },
-  { id: '3', name: 'Whisky Single Malt', price: 89.99, cost: 50.00, category: 'Espirituosas', stock: 8, minStock: 5 },
-  { id: '4', name: 'Champagne Brut', price: 65.00, cost: 35.00, category: 'Vinos', stock: 12, minStock: 10 },
-  { id: '5', name: 'Gin Premium', price: 42.50, cost: 20.00, category: 'Espirituosas', stock: 20, minStock: 10 },
-  { id: '6', name: 'Cerveza Lager', price: 6.00, cost: 3.00, category: 'Cervezas', stock: 60, minStock: 24 },
-  { id: '7', name: 'Ron Añejo', price: 38.00, cost: 18.00, category: 'Espirituosas', stock: 18, minStock: 8 },
-  { id: '8', name: 'Vino Blanco Seco', price: 32.00, cost: 15.00, category: 'Vinos', stock: 22, minStock: 10 },
-  { id: '9', name: 'Vodka Premium', price: 35.00, cost: 16.00, category: 'Espirituosas', stock: 5, minStock: 6 },
-  { id: '10', name: 'Tequila Reposado', price: 52.00, cost: 28.00, category: 'Espirituosas', stock: 7, minStock: 5 },
-];
+const MOCK_INVENTORY: Product[] = [];
 
 export function InventarioView() {
   const [searchTerm, setSearchTerm] = useState('');
