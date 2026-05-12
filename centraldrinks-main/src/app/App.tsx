@@ -8,6 +8,7 @@ import { LoginView } from './components/LoginView';
 import { InicioView } from './components/InicioView';
 import { ConfiguracionView } from './components/ConfiguracionView';
 import { EstadisticasView } from './components/EstadisticasView';
+import { UsuariosView } from './components/UsuariosView';
 
 export interface PaymentMethod {
   id: string;
@@ -22,7 +23,7 @@ export interface FixedExpense {
 }
 
 export default function App() {
-  const [activeView, setActiveView] = useState<'inicio' | 'ventas' | 'inventario' | 'caja' | 'estadisticas' | 'configuracion'>('ventas');
+  const [activeView, setActiveView] = useState<'inicio' | 'ventas' | 'inventario' | 'caja' | 'estadisticas' | 'usuarios' | 'configuracion'>('ventas');
   const [role, setRole] = useState<'admin' | 'cajero' | null>(null);
   const [isCajaOpen, setIsCajaOpen] = useState(false);
   const [initialCash, setInitialCash] = useState(0);
@@ -93,6 +94,7 @@ export default function App() {
         />
       )}
       {activeView === 'estadisticas' && role === 'admin' && <EstadisticasView />}
+      {activeView === 'usuarios' && role === 'admin' && <UsuariosView />}
       {activeView === 'configuracion' && role === 'admin' && (
         <ConfiguracionView 
           paymentMethods={paymentMethods} 

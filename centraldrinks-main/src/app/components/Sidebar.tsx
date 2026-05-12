@@ -1,8 +1,8 @@
-import { ShoppingCart, Package, DollarSign, Settings, LogOut, Home, BarChart3 } from 'lucide-react';
+import { ShoppingCart, Package, DollarSign, Settings, LogOut, Home, BarChart3, Users } from 'lucide-react';
 
 interface SidebarProps {
-  activeView: 'inicio' | 'ventas' | 'inventario' | 'caja' | 'configuracion' | 'estadisticas';
-  onViewChange: (view: 'inicio' | 'ventas' | 'inventario' | 'caja' | 'configuracion' | 'estadisticas') => void;
+  activeView: 'inicio' | 'ventas' | 'inventario' | 'caja' | 'configuracion' | 'estadisticas' | 'usuarios';
+  onViewChange: (view: 'inicio' | 'ventas' | 'inventario' | 'caja' | 'configuracion' | 'estadisticas' | 'usuarios') => void;
   role: 'admin' | 'cajero';
   onLogout: () => void;
 }
@@ -14,6 +14,7 @@ export function Sidebar({ activeView, onViewChange, role, onLogout }: SidebarPro
     { id: 'inventario' as const, icon: Package, label: 'Stock', roles: ['admin'] },
     { id: 'caja' as const, icon: DollarSign, label: 'Caja', roles: ['admin', 'cajero'] },
     { id: 'estadisticas' as const, icon: BarChart3, label: 'Stats', roles: ['admin'] },
+    { id: 'usuarios' as const, icon: Users, label: 'Usuarios', roles: ['admin'] },
     { id: 'configuracion' as const, icon: Settings, label: 'Config', roles: ['admin'] },
   ];
 

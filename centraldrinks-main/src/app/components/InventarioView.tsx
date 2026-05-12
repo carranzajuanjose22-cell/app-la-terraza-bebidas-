@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Plus, Edit2, AlertTriangle } from 'lucide-react';
+import { Search, Plus, Edit2, AlertTriangle, X, Package } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Product {
@@ -28,8 +28,7 @@ const MOCK_INVENTORY: Product[] = [
 export function InventarioView() {
   const [searchTerm, setSearchTerm] = useState('');
   const [inventory, setInventory] = useState<Product[]>(MOCK_INVENTORY);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editValues, setEditValues] = useState<Partial<Product>>({});
+  const [productModal, setProductModal] = useState<{isOpen: boolean, item: Product | null}>({isOpen: false, item: null});
 
   const filteredInventory = inventory.filter(product =>
     product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -39,46 +38,41 @@ export function InventarioView() {
   const lowStockItems = inventory.filter(p => p.stock <= p.minStock);
 
   const startEdit = (product: Product) => {
-    setEditingId(product.id);
-    setEditValues(product);
+    setProductModal({
+      isOpen: true,
+      item: product
+    });
   };
 
   const handleAddProduct = () => {
-    const newProduct: Product = {
-      id: Math.random().toString(36).substr(2, 9),
-      name: '',
-      price: 0,
-      cost: 0,
-      category: 'Vinos',
-      stock: 0,
-      minStock: 5,
-    };
-    setInventory([newProduct, ...inventory]);
-    startEdit(newProduct);
-  };
-
-  const saveEdit = () => {
-    if (editingId) {
-      if (!editValues.name) {
-        toast.error('El nombre del producto es obligatorio');
-        return;
+    setProductModal({
+      isOpen: true,
+      item: {
+        id: Math.random().toString(36).substr(2, 9),
+        name: '',
+        price: 0,
+        cost: 0,
+        category: 'Vinos',
+        stock: 0,
+        minStock: 5,
       }
-      setInventory(prev =>
-        prev.map(p => p.id === editingId ? { ...p, ...editValues } as Product : p)
-      );
-      toast.success('Producto guardado');
-      setEditingId(null);
-      setEditValues({});
-    }
+    });
   };
 
-  const cancelEdit = () => {
-    const editingProduct = inventory.find(p => p.id === editingId);
-    if (editingProduct && editingProduct.name === '') {
-      setInventory(prev => prev.filter(p => p.id !== editingId));
+  const handleSaveProduct = () => {
+    if (!productModal.item?.name) {
+      toast.error('El nombre del producto es obligatorio');
+      return;
     }
-    setEditingId(null);
-    setEditValues({});
+    if (inventory.some(p => p.id === productModal.item!.id)) {
+      setInventory(prev => prev.map(p => p.id === productModal.item!.id ? productModal.item! : p));
+      toast.success('Producto actualizado exitosamente');
+    }
+    else {
+      setInventory([productModal.item!, ...inventory]);
+      toast.success('Producto creado exitosamente');
+    }
+    setProductModal({isOpen: false, item: null});
   };
 
   return (
@@ -143,87 +137,27 @@ export function InventarioView() {
             </thead>
             <tbody>
               {filteredInventory.map(product => {
-                const isEditing = editingId === product.id;
                 const lowStock = product.stock <= product.minStock;
 
                 return (
                   <tr key={product.id} className="border-b border-[#2a2a2a] hover:bg-[#2a2a2a] transition-colors">
                     <td className="p-4 whitespace-nowrap">
-                      {isEditing ? (
-                        <input
-                          type="text"
-                          value={editValues.name || ''}
-                          onChange={(e) => setEditValues({ ...editValues, name: e.target.value })}
-                          className="bg-[#1a1a1a] text-white rounded px-3 py-2 border border-[#6B21A8] outline-none w-full min-w-[200px]"
-                        />
-                      ) : (
-                        <span className="text-white">{product.name}</span>
-                      )}
+                      <span className="text-white">{product.name}</span>
                     </td>
                     <td className="p-4 whitespace-nowrap">
-                      {isEditing ? (
-                        <select
-                          value={editValues.category || ''}
-                          onChange={(e) => setEditValues({ ...editValues, category: e.target.value })}
-                          className="bg-[#1a1a1a] text-white rounded px-3 py-2 border border-[#6B21A8] outline-none min-w-[140px]"
-                        >
-                          <option value="Vinos">Vinos</option>
-                          <option value="Cervezas">Cervezas</option>
-                          <option value="Espirituosas">Espirituosas</option>
-                        </select>
-                      ) : (
-                        <span className="text-gray-400">{product.category}</span>
-                      )}
+                      <span className="text-gray-400">{product.category}</span>
                     </td>
                     <td className="p-4 whitespace-nowrap">
-                      {isEditing ? (
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={editValues.cost || ''}
-                          onChange={(e) => setEditValues({ ...editValues, cost: parseFloat(e.target.value) })}
-                          className="bg-[#1a1a1a] text-white rounded px-3 py-2 border border-[#6B21A8] outline-none w-24"
-                        />
-                      ) : (
-                        <span className="text-gray-400">${product.cost?.toFixed(2) || '0.00'}</span>
-                      )}
+                      <span className="text-gray-400">${product.cost?.toFixed(2) || '0.00'}</span>
                     </td>
                     <td className="p-4 whitespace-nowrap">
-                      {isEditing ? (
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={editValues.price || ''}
-                          onChange={(e) => setEditValues({ ...editValues, price: parseFloat(e.target.value) })}
-                          className="bg-[#1a1a1a] text-white rounded px-3 py-2 border border-[#6B21A8] outline-none w-32"
-                        />
-                      ) : (
-                        <span className="text-white">${product.price.toFixed(2)}</span>
-                      )}
+                      <span className="text-white">${product.price.toFixed(2)}</span>
                     </td>
                     <td className="p-4 whitespace-nowrap">
-                      {isEditing ? (
-                        <input
-                          type="number"
-                          value={editValues.stock || ''}
-                          onChange={(e) => setEditValues({ ...editValues, stock: parseInt(e.target.value) })}
-                          className="bg-[#1a1a1a] text-white rounded px-3 py-2 border border-[#6B21A8] outline-none w-24"
-                        />
-                      ) : (
-                        <span className="text-white">{product.stock} unidades</span>
-                      )}
+                      <span className="text-white">{product.stock} unidades</span>
                     </td>
                     <td className="p-4 whitespace-nowrap">
-                      {isEditing ? (
-                        <input
-                          type="number"
-                          value={editValues.minStock || ''}
-                          onChange={(e) => setEditValues({ ...editValues, minStock: parseInt(e.target.value) || 0 })}
-                          className="bg-[#1a1a1a] text-white rounded px-3 py-2 border border-[#6B21A8] outline-none w-24"
-                        />
-                      ) : (
-                        <span className="text-gray-400">{product.minStock} unid.</span>
-                      )}
+                      <span className="text-gray-400">{product.minStock} unid.</span>
                     </td>
                     <td className="p-4 whitespace-nowrap">
                       <span className={`px-3 py-1 rounded-full text-sm ${
@@ -235,29 +169,12 @@ export function InventarioView() {
                       </span>
                     </td>
                     <td className="p-4 text-center whitespace-nowrap">
-                      {isEditing ? (
-                        <div className="flex gap-2 justify-center">
-                          <button
-                            onClick={saveEdit}
-                            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-all"
-                          >
-                            Guardar
-                          </button>
-                          <button
-                            onClick={cancelEdit}
-                            className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-all"
-                          >
-                            Cancelar
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => startEdit(product)}
-                          className="text-gray-400 hover:text-white transition-colors"
-                        >
-                          <Edit2 size={18} />
-                        </button>
-                      )}
+                      <button
+                        onClick={() => startEdit(product)}
+                        className="text-gray-400 hover:text-white transition-colors"
+                      >
+                        <Edit2 size={18} />
+                      </button>
                     </td>
                   </tr>
                 );
@@ -266,6 +183,100 @@ export function InventarioView() {
           </table>
         </div>
       </div>
+
+      {productModal.isOpen && productModal.item && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#1a1a1a] rounded-2xl w-full max-w-md border border-[#2a2a2a] max-h-[90vh] flex flex-col">
+            <div className="p-6 border-b border-[#2a2a2a] flex items-center justify-between shrink-0">
+              <h2 className="text-white text-2xl flex items-center gap-2">
+                <Package size={24} className="text-[#8B5CF6]" />
+                {inventory.some(p => p.id === productModal.item!.id) ? 'Editar Producto' : 'Nuevo Producto'}
+              </h2>
+              <button onClick={() => setProductModal({isOpen: false, item: null})} className="text-gray-400 hover:text-white transition-colors">
+                <X size={24} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4 overflow-y-auto">
+              <div>
+                <label className="text-gray-400 text-sm block mb-2">Nombre del producto</label>
+                <input
+                  type="text"
+                  value={productModal.item.name}
+                  onChange={(e) => setProductModal(prev => ({...prev, item: prev.item ? {...prev.item, name: e.target.value} : null}))}
+                  className="w-full bg-[#2a2a2a] text-white rounded-xl px-4 py-3 border border-[#333] focus:border-[#6B21A8] outline-none transition-colors"
+                  placeholder="Ej. Vino Tinto"
+                />
+              </div>
+              <div>
+                <label className="text-gray-400 text-sm block mb-2">Categoría</label>
+                <select
+                  value={productModal.item.category}
+                  onChange={(e) => setProductModal(prev => ({...prev, item: prev.item ? {...prev.item, category: e.target.value} : null}))}
+                  className="w-full bg-[#2a2a2a] text-white rounded-xl px-4 py-3 border border-[#333] focus:border-[#6B21A8] outline-none transition-colors"
+                >
+                  <option value="Vinos">Vinos</option>
+                  <option value="Cervezas">Cervezas</option>
+                  <option value="Espirituosas">Espirituosas</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-gray-400 text-sm block mb-2">Costo ($)</label>
+                  <input
+                    type="number"
+                    value={productModal.item.cost}
+                    onChange={(e) => setProductModal(prev => ({...prev, item: prev.item ? {...prev.item, cost: Number(e.target.value)} : null}))}
+                    className="w-full bg-[#2a2a2a] text-white rounded-xl px-4 py-3 border border-[#333] focus:border-[#6B21A8] outline-none transition-colors"
+                    step="0.01"
+                    min="0"
+                  />
+                </div>
+                <div>
+                  <label className="text-gray-400 text-sm block mb-2">Precio ($)</label>
+                  <input
+                    type="number"
+                    value={productModal.item.price}
+                    onChange={(e) => setProductModal(prev => ({...prev, item: prev.item ? {...prev.item, price: Number(e.target.value)} : null}))}
+                    className="w-full bg-[#2a2a2a] text-white rounded-xl px-4 py-3 border border-[#333] focus:border-[#6B21A8] outline-none transition-colors"
+                    step="0.01"
+                    min="0"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-gray-400 text-sm block mb-2">Stock Actual</label>
+                  <input
+                    type="number"
+                    value={productModal.item.stock}
+                    onChange={(e) => setProductModal(prev => ({...prev, item: prev.item ? {...prev.item, stock: Number(e.target.value)} : null}))}
+                    className="w-full bg-[#2a2a2a] text-white rounded-xl px-4 py-3 border border-[#333] focus:border-[#6B21A8] outline-none transition-colors"
+                    min="0"
+                  />
+                </div>
+                <div>
+                  <label className="text-gray-400 text-sm block mb-2">Stock Mínimo</label>
+                  <input
+                    type="number"
+                    value={productModal.item.minStock}
+                    onChange={(e) => setProductModal(prev => ({...prev, item: prev.item ? {...prev.item, minStock: Number(e.target.value)} : null}))}
+                    className="w-full bg-[#2a2a2a] text-white rounded-xl px-4 py-3 border border-[#333] focus:border-[#6B21A8] outline-none transition-colors"
+                    min="0"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="p-6 border-t border-[#2a2a2a] flex gap-4 shrink-0">
+              <button onClick={() => setProductModal({isOpen: false, item: null})} className="flex-1 bg-[#2a2a2a] hover:bg-[#333] text-white py-4 rounded-xl transition-all">
+                Cancelar
+              </button>
+              <button onClick={handleSaveProduct} className="flex-1 bg-[#6B21A8] hover:bg-[#581C87] text-white py-4 rounded-xl transition-all">
+                Guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
