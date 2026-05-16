@@ -14,8 +14,22 @@ import transactionRoutes from "./routes/transactionRoutes.js";
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:4173",
+  ...(process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(",").map((o) => o.trim()) : []),
+];
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:5173",
+  origin: (origin, callback) => {
+    // Permitir requests sin origin (Postman, curl, etc.)
+    if (!origin) return callback(null, true);
+    // Permitir cualquier subdominio de vercel.app en preview
+    if (origin.endsWith(".vercel.app") || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    callback(new Error(`CORS bloqueado para: ${origin}`));
+  },
   credentials: true,
 }));
 app.use(express.json());
