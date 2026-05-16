@@ -103,7 +103,7 @@ export const transactionItems = sqliteTable("transaction_items", {
   transactionId: integer("transaction_id")
     .notNull()
     .references(() => transactions.id, { onDelete: "cascade" }),
-  productId: integer("product_id").references(() => products.id),
+  productId: integer("product_id").references(() => products.id, { onDelete: "set null" }),
   productName: text("product_name").notNull(),
   quantity: integer("quantity").notNull(),
   unitPrice: real("unit_price").notNull(),
