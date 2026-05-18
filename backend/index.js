@@ -185,4 +185,10 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: "Error interno del servidor" });
 });
 
-app.listen(PORT, () => console.log(`Servidor corriendo en http://localhost:${PORT}`));
+// En serverless (Vercel) no se debe llamar a listen(); Vercel importa el handler exportado.
+// Solo arrancamos el servidor cuando corremos fuera de Vercel (desarrollo local, `node index.js`).
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => console.log(`Servidor corriendo en http://localhost:${PORT}`));
+}
+
+export default app;

@@ -24,5 +24,10 @@
   },
   "devDependencies": {
     "drizzle-kit": "^0.30.4"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }
