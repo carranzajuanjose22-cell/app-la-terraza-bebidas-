@@ -10,6 +10,12 @@ import paymentMethodRoutes from "./routes/paymentMethodRoutes.js";
 import fixedExpenseRoutes from "./routes/fixedExpenseRoutes.js";
 import cashRegisterRoutes from "./routes/cashRegisterRoutes.js";
 import transactionRoutes from "./routes/transactionRoutes.js";
+import dailyExpenseRoutes from "./routes/dailyExpenseRoutes.js";
+import barBottleRoutes from "./routes/barBottleRoutes.js";
+import internalWithdrawalRoutes from "./routes/internalWithdrawalRoutes.js";
+import { db } from "./db/index.js";
+import { transactionItems, products, barBottles, cashRegisters, dailyExpenses, internalWithdrawals, stockModifications } from "./models/schema.js";
+import { eq } from "drizzle-orm";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -45,6 +51,133 @@ app.use("/api/payment-methods", paymentMethodRoutes);
 app.use("/api/fixed-expenses", fixedExpenseRoutes);
 app.use("/api/cash-register", cashRegisterRoutes);
 app.use("/api/transactions", transactionRoutes);
+app.use("/api/daily-expenses", dailyExpenseRoutes);
+app.use("/api/bar-bottles", barBottleRoutes);
+app.use("/api/internal-withdrawals", internalWithdrawalRoutes);
+
+app.get("/api/stats/restock", async (req, res) => {
+  try {
+    let total = 0;
+    // Sumar el costo de todo lo vendido en el POS
+    const txItems = await db.select({ quantity: transactionItems.quantity, cost: products.cost })
+      .from(transactionItems)
+      .innerJoin(products, eq(transactionItems.productId, products.id));
+    txItems.forEach(i => total += (i.quantity * i.cost));
+
+    // Sumar el costo de todas las botellas que se abrieron/vaciaron en la barra
+    const bottles = await db.select({ cost: products.cost })
+      .from(barBottles)
+      .innerJoin(products, eq(barBottles.productId, products.id));
+    bottles.forEach(b => total += b.cost);
+
+    res.json({ restockCost: total });
+  } catch (err) {
+    res.status(500).json({ message: "Error calculando restock" });
+  }
+});
+
+app.post("/api/stats/stock-modifications", async (req, res) => {
+  try {
+    const { productId, productName, oldStock, newStock } = req.body;
+    await db.insert(stockModifications).values({
+      productId,
+      productName,
+      oldStock,
+      newStock
+    });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ message: "Error registrando modificación" });
+  }
+});
+
+app.get("/api/stats/activity-log", async (req, res) => {
+  try {
+    const logs = [];
+
+    const registers = await db.select().from(cashRegisters);
+    registers.forEach(r => {
+      logs.push({
+        id: `caja-open-${r.id}`,
+        type: "Apertura de Caja",
+        date: r.openedAt,
+        details: `Fondo inicial: $${r.initialCash}`,
+        icon: "Unlock",
+        color: "text-green-500",
+        bg: "bg-green-500/10"
+      });
+      if (r.status === "closed" && r.closedAt) {
+        logs.push({
+          id: `caja-close-${r.id}`,
+          type: "Cierre de Caja",
+          date: r.closedAt,
+          details: `Total ingresos: $${r.totalIngresos}`,
+          icon: "Lock",
+          color: "text-[#8B5CF6]",
+          bg: "bg-[#8B5CF6]/10"
+        });
+      }
+    });
+
+    const dExpenses = await db.select().from(dailyExpenses);
+    dExpenses.forEach(e => {
+      logs.push({
+        id: `gasto-${e.id}`,
+        type: "Extracción",
+        date: e.createdAt,
+        details: `${e.reason} - $${e.amount}`,
+        icon: "Wallet",
+        color: "text-red-400",
+        bg: "bg-red-400/10"
+      });
+    });
+
+    const bottles = await db.select().from(barBottles);
+    bottles.forEach(b => {
+      logs.push({
+        id: `botella-${b.id}`,
+        type: "Botella a Barra",
+        date: b.createdAt,
+        details: b.productName,
+        icon: "Wine",
+        color: "text-purple-400",
+        bg: "bg-purple-400/10"
+      });
+    });
+
+    const withdrawals = await db.select().from(internalWithdrawals);
+    withdrawals.forEach(w => {
+      logs.push({
+        id: `retiro-${w.id}`,
+        type: "Retiro Consumo",
+        date: w.createdAt,
+        details: `${w.quantity}x ${w.productName}`,
+        icon: "PackageMinus",
+        color: "text-orange-400",
+        bg: "bg-orange-400/10"
+      });
+    });
+
+    const stockMods = await db.select().from(stockModifications);
+    stockMods.forEach(m => {
+      logs.push({
+        id: `stock-${m.id}`,
+        type: "Ajuste de Stock",
+        date: m.createdAt,
+        details: `${m.productName}: ${m.oldStock} ➔ ${m.newStock} un.`,
+        icon: "Package",
+        color: "text-blue-400",
+        bg: "bg-blue-400/10"
+      });
+    });
+
+    // Ordenamos por fecha de lo más reciente a lo más antiguo
+    logs.sort((a, b) => new Date(b.date) - new Date(a.date));
+    res.json(logs.slice(0, 50)); // Retornamos los últimos 50 eventos
+  } catch (err) {
+    res.status(500).json({ message: "Error obteniendo historial" });
+  }
+});
 
 app.use((req, res) => res.status(404).json({ message: "Ruta no encontrada" }));
 app.use((err, req, res, next) => {

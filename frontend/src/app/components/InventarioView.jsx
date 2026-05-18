@@ -74,12 +74,26 @@ export function InventarioView() {
         stock: parseInt(productModal.item.stock, 10) || 0,
         minStock: parseInt(productModal.item.minStock, 10) || 0,
       };
+
+      const originalProduct = inventory.find(p => p.id === productModal.item.id);
+      const oldStock = originalProduct ? Number(originalProduct.stock) : 0;
+
       if (productModal.isNew) {
         await api.post("/products", payload);
         toast.success("Producto creado exitosamente");
       } else {
         await api.put(`/products/${productModal.item.id}`, payload);
         toast.success("Producto actualizado exitosamente");
+        
+        // Si el stock fue modificado manualmente, registramos el evento
+        if (oldStock !== payload.stock) {
+          await api.post("/stats/stock-modifications", {
+            productId: productModal.item.id,
+            productName: productModal.item.name,
+            oldStock,
+            newStock: payload.stock
+          }).catch(() => {});
+        }
       }
       setProductModal({ isOpen: false, item: null, isNew: false });
       fetchData();

@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { Search, Lock } from "lucide-react";
+import { Search, Lock, Wallet } from "lucide-react";
 import { ProductCard } from "./ProductCard.jsx";
 import { CartSidebar } from "./CartSidebar.jsx";
 import { PaymentModal } from "./PaymentModal.jsx";
+import { DailyExpenseModal } from "./DailyExpenseModal.jsx";
 import { Loader } from "./Loader.jsx";
 import { toast } from "sonner";
 import api from "../../services/api.js";
@@ -12,6 +13,7 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
   const [selectedCategory, setSelectedCategory] = useState("Todos");
   const [cartItems, setCartItems] = useState([]);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [products, setProducts] = useState([]);
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -101,6 +103,17 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
 
   const total = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
+  const handleDailyExpense = async (expenseData) => {
+    try {
+      await api.post("/daily-expenses", expenseData);
+      toast.success("Gasto registrado correctamente");
+      setShowExpenseModal(false);
+    } catch (err) {
+      toast.error("Error al registrar el gasto", { description: err.response?.data?.message || err.message });
+      throw err;
+    }
+  };
+
   return (
     <div className="flex-1 flex relative">
       {loading && <Loader />}
@@ -118,7 +131,18 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
 
       <div className="flex-1 p-8 overflow-y-auto">
         <div className="mb-8">
-          <h1 className="text-white text-4xl mb-6">Punto de Venta</h1>
+          <div className="flex items-center justify-between mb-6">
+            <h1 className="text-white text-4xl">Punto de Venta</h1>
+            {isCajaOpen && (
+              <button
+                onClick={() => setShowExpenseModal(true)}
+                className="bg-[#2a2a2a] hover:bg-[#333] text-white px-4 py-2 rounded-xl flex items-center gap-2 transition-colors border border-[#333]"
+              >
+                <Wallet size={20} className="text-orange-400" />
+                Gastos / Extracción
+              </button>
+            )}
+          </div>
           <div className="flex gap-4 mb-6">
             <div className="flex-1 relative">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
@@ -177,6 +201,13 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
             <button onClick={() => setShowPaymentModal(false)} className="bg-[#6B21A8] text-white px-6 py-3 rounded-xl">Cerrar</button>
           </div>
         </div>
+      )}
+
+      {showExpenseModal && (
+        <DailyExpenseModal
+          onClose={() => setShowExpenseModal(false)}
+          onSubmit={handleDailyExpense}
+        />
       )}
     </div>
   );

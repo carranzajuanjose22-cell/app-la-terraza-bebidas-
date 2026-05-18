@@ -1,6 +1,6 @@
 import { eq, desc } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { cashRegisters, transactions, transactionItems, transactionPayments } from "../models/schema.js";
+import { cashRegisters, transactions, transactionItems, transactionPayments, dailyExpenses } from "../models/schema.js";
 
 export async function getOpenRegister() {
   const [register] = await db
@@ -51,6 +51,16 @@ export async function closeRegister(registerId) {
       } else {
         totalTransferencia += p.amount;
       }
+    }
+  }
+
+  // Restar extracciones / gastos diarios
+  const expenses = await db.select().from(dailyExpenses).where(eq(dailyExpenses.cashRegisterId, registerId));
+  for (const exp of expenses) {
+    if (exp.method === "efectivo") {
+      totalEfectivo -= exp.amount;
+    } else {
+      totalTransferencia -= exp.amount;
     }
   }
 
@@ -131,6 +141,12 @@ export async function getRegisterWithItems(registerId) {
     }
   }
 
+  // Obtener las extracciones de esta caja
+  const expenses = await db
+    .select()
+    .from(dailyExpenses)
+    .where(eq(dailyExpenses.cashRegisterId, registerId));
+
   const soldItems = Object.entries(aggregated).map(([name, data]) => ({
     name,
     quantity: data.quantity,
@@ -142,5 +158,5 @@ export async function getRegisterWithItems(registerId) {
     amount,
   }));
 
-  return { ...register, soldItems, totalSurcharges, surchargeBreakdown };
+  return { ...register, soldItems, totalSurcharges, surchargeBreakdown, expenses };
 }

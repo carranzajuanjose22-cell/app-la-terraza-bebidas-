@@ -125,3 +125,52 @@ export const transactionPayments = sqliteTable("transaction_payments", {
   // Porcentaje de recargo aplicado
   surchargePercent: real("surcharge_percent").notNull().default(0),
 });
+
+// ─────────────────────────────────────────
+// GASTOS DIARIOS / EXTRACCIONES
+// ─────────────────────────────────────────
+export const dailyExpenses = sqliteTable("daily_expenses", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  cashRegisterId: integer("cash_register_id").references(() => cashRegisters.id),
+  userId: integer("user_id").references(() => users.id),
+  reason: text("reason").notNull(),
+  amount: real("amount").notNull(),
+  method: text("method", { enum: ["efectivo", "transferencia"] }).notNull(),
+  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+});
+
+// ─────────────────────────────────────────
+// BOTELLAS DE LA BARRA (ABIERTAS)
+// ─────────────────────────────────────────
+export const barBottles = sqliteTable("bar_bottles", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  productId: integer("product_id").notNull().references(() => products.id),
+  productName: text("product_name").notNull(),
+  status: text("status", { enum: ["open", "empty"] }).notNull().default("open"),
+  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+});
+
+// ─────────────────────────────────────────
+// RETIROS / CONSUMO INTERNO
+// ─────────────────────────────────────────
+export const internalWithdrawals = sqliteTable("internal_withdrawals", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id").references(() => users.id),
+  productId: integer("product_id").references(() => products.id, { onDelete: "set null" }),
+  productName: text("product_name").notNull(),
+  quantity: integer("quantity").notNull(),
+  cost: real("cost").notNull().default(0),
+  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+});
+
+// ─────────────────────────────────────────
+// MODIFICACIONES DE STOCK MANUALES
+// ─────────────────────────────────────────
+export const stockModifications = sqliteTable("stock_modifications", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  productId: integer("product_id").references(() => products.id, { onDelete: "set null" }),
+  productName: text("product_name").notNull(),
+  oldStock: integer("old_stock").notNull(),
+  newStock: integer("new_stock").notNull(),
+  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+});
