@@ -112,7 +112,7 @@ export default function App() {
   }
 
   return (
-    <div className="size-full flex bg-[#121212] dark relative" style={{ minHeight: "100vh" }}>
+    <div className="size-full flex bg-[#121212] dark relative overflow-x-hidden" style={{ minHeight: "100vh" }}>
       {appLoading && <Loader fullScreen />}
       <Sidebar
         activeView={activeView}

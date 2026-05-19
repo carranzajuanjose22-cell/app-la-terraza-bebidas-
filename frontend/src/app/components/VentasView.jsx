@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Search, Lock, Wallet } from "lucide-react";
+import { Search, Lock, Wallet, ShoppingCart } from "lucide-react";
 import { ProductCard } from "./ProductCard.jsx";
 import { CartSidebar } from "./CartSidebar.jsx";
 import { PaymentModal } from "./PaymentModal.jsx";
@@ -14,6 +14,7 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
   const [cartItems, setCartItems] = useState([]);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
+  const [showMobileCart, setShowMobileCart] = useState(false);
   const [products, setProducts] = useState([]);
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -97,11 +98,17 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
       setShowPaymentModal(false);
     } catch (err) {
       toast.error("No se pudo registrar la venta", { description: err.response?.data?.message || err.message });
-      throw err; // re-lanzar para que PaymentModal libere el estado submitting
+      throw err;
     }
   };
 
   const total = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const totalCartItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+
+  const handleOpenCheckout = () => {
+    setShowMobileCart(false);
+    setShowPaymentModal(true);
+  };
 
   const handleDailyExpense = async (expenseData) => {
     try {
@@ -115,52 +122,56 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
   };
 
   return (
-    <div className="flex-1 flex relative">
+    <div className="flex-1 flex relative overflow-hidden">
       {loading && <Loader />}
       {!isCajaOpen && (
-        <div className="absolute inset-0 z-50 backdrop-blur-md bg-[#121212]/60 flex items-center justify-center">
-          <div className="bg-[#1a1a1a] p-8 rounded-2xl border border-[#2a2a2a] text-center max-w-md shadow-2xl">
-            <div className="w-16 h-16 bg-red-500/20 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Lock size={32} />
+        <div className="absolute inset-0 z-50 backdrop-blur-md bg-[#121212]/60 flex items-center justify-center p-4">
+          <div className="bg-[#1a1a1a] p-6 md:p-8 rounded-2xl border border-[#2a2a2a] text-center max-w-sm md:max-w-md shadow-2xl w-full">
+            <div className="w-14 h-14 md:w-16 md:h-16 bg-red-500/20 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Lock size={28} />
             </div>
-            <h2 className="text-white text-2xl font-bold mb-2">Caja Cerrada</h2>
-            <p className="text-gray-400">Pedile al administrador que abra la caja.</p>
+            <h2 className="text-white text-xl md:text-2xl font-bold mb-2">Caja Cerrada</h2>
+            <p className="text-gray-400 text-sm md:text-base">Pedile al administrador que abra la caja.</p>
           </div>
         </div>
       )}
 
-      <div className="flex-1 p-8 overflow-y-auto">
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-6">
-            <h1 className="text-white text-4xl">Punto de Venta</h1>
+      {/* Área principal de productos */}
+      <div className="flex-1 p-4 pb-24 md:p-8 md:pb-8 overflow-y-auto">
+        <div className="mb-6 md:mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 md:mb-6 gap-3">
+            <h1 className="text-white text-2xl md:text-4xl">Punto de Venta</h1>
             {isCajaOpen && (
               <button
                 onClick={() => setShowExpenseModal(true)}
-                className="bg-[#2a2a2a] hover:bg-[#333] text-white px-4 py-2 rounded-xl flex items-center gap-2 transition-colors border border-[#333]"
+                className="bg-[#2a2a2a] hover:bg-[#333] text-white px-4 py-2.5 rounded-xl flex items-center gap-2 transition-colors border border-[#333] text-sm md:text-base self-start sm:self-auto"
               >
-                <Wallet size={20} className="text-orange-400" />
+                <Wallet size={18} className="text-orange-400" />
                 Gastos / Extracción
               </button>
             )}
           </div>
-          <div className="flex gap-4 mb-6">
-            <div className="flex-1 relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-              <input
-                type="text"
-                placeholder="Buscar productos..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full bg-[#2a2a2a] text-white rounded-xl pl-12 pr-4 py-4 border border-[#333] focus:border-[#6B21A8] outline-none"
-              />
-            </div>
+
+          <div className="relative mb-4">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+            <input
+              type="text"
+              placeholder="Buscar productos..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-[#2a2a2a] text-white rounded-xl pl-12 pr-4 py-3 md:py-4 border border-[#333] focus:border-[#6B21A8] outline-none"
+            />
           </div>
-          <div className="flex gap-3 flex-wrap">
+
+          {/* Filtro de categorías — scroll horizontal en móvil */}
+          <div className="flex gap-2 md:gap-3 overflow-x-auto pb-2 md:pb-0 md:flex-wrap scrollbar-hide">
             {allCategories.map((category) => (
               <button
                 key={category}
                 onClick={() => setSelectedCategory(category)}
-                className={`px-6 py-3 rounded-lg transition-all ${selectedCategory === category ? "bg-[#6B21A8] text-white" : "bg-[#2a2a2a] text-gray-400 hover:bg-[#333]"}`}
+                className={`px-4 md:px-6 py-2 md:py-3 rounded-lg transition-all text-sm whitespace-nowrap shrink-0 ${
+                  selectedCategory === category ? "bg-[#6B21A8] text-white" : "bg-[#2a2a2a] text-gray-400 hover:bg-[#333]"
+                }`}
               >
                 {category}
               </button>
@@ -178,11 +189,29 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
         </div>
       </div>
 
+      {/* Botón flotante del carrito — solo móvil */}
+      <div className="fixed bottom-20 right-4 md:hidden z-30">
+        <button
+          onClick={() => setShowMobileCart(true)}
+          className="bg-[#6B21A8] hover:bg-[#581C87] text-white h-14 px-5 rounded-full flex items-center gap-2.5 shadow-xl shadow-[#6B21A8]/40 transition-all active:scale-95"
+        >
+          <ShoppingCart size={20} />
+          {totalCartItems > 0 && (
+            <span className="bg-white text-[#6B21A8] rounded-full w-5 h-5 text-xs flex items-center justify-center font-bold leading-none">
+              {totalCartItems}
+            </span>
+          )}
+          <span className="font-medium">${total.toFixed(2)}</span>
+        </button>
+      </div>
+
       <CartSidebar
         items={cartItems}
         onUpdateQuantity={handleUpdateQuantity}
         onRemoveItem={handleRemoveItem}
-        onCheckout={() => setShowPaymentModal(true)}
+        onCheckout={handleOpenCheckout}
+        isMobileOpen={showMobileCart}
+        onMobileClose={() => setShowMobileCart(false)}
       />
 
       {showPaymentModal && paymentMethods.length > 0 && (

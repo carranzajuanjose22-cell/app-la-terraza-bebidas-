@@ -37,12 +37,14 @@ export function ConfiguracionView() {
     if (!payment.name.trim()) { toast.error("El nombre del método es obligatorio"); return; }
     if (submitting) return;
     setSubmitting(true);
+    // Convertir surcharge a número antes de enviar (el estado se guarda como string vacío o número)
+    const payload = { ...payment, surcharge: Number(payment.surcharge) || 0 };
     try {
       if (payment.id && paymentMethods.some((p) => p.id === payment.id)) {
-        await api.put(`/payment-methods/${payment.id}`, payment);
+        await api.put(`/payment-methods/${payment.id}`, payload);
         toast.success("Método de pago actualizado");
       } else {
-        await api.post("/payment-methods", payment);
+        await api.post("/payment-methods", payload);
         toast.success("Método de pago agregado");
       }
       setPaymentModal({ isOpen: false, item: null });
@@ -67,12 +69,14 @@ export function ConfiguracionView() {
     if (!expense.name.trim()) { toast.error("La descripción del gasto es obligatoria"); return; }
     if (submitting) return;
     setSubmitting(true);
+    // Convertir amount a número antes de enviar
+    const payload = { ...expense, amount: Number(expense.amount) || 0 };
     try {
       if (expense.id && expenses.some((e) => e.id === expense.id)) {
-        await api.put(`/fixed-expenses/${expense.id}`, expense);
+        await api.put(`/fixed-expenses/${expense.id}`, payload);
         toast.success("Gasto actualizado");
       } else {
-        await api.post("/fixed-expenses", expense);
+        await api.post("/fixed-expenses", payload);
         toast.success("Gasto agregado");
       }
       setExpenseModal({ isOpen: false, item: null });
@@ -124,13 +128,11 @@ export function ConfiguracionView() {
   };
 
   return (
-    <div className="flex-1 p-8 overflow-y-auto relative">
+    <div className="flex-1 p-4 pb-20 md:p-8 overflow-y-auto relative">
       {loading && <Loader />}
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-white text-4xl mb-2">Configuración</h1>
-          <p className="text-gray-400">Ajustes generales y financieros del sistema</p>
-        </div>
+      <div className="mb-6 md:mb-8">
+        <h1 className="text-white text-2xl md:text-4xl mb-1 md:mb-2">Configuración</h1>
+        <p className="text-gray-400 text-sm">Ajustes generales y financieros del sistema</p>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
@@ -142,7 +144,7 @@ export function ConfiguracionView() {
               <CreditCard className="text-[#8B5CF6]" size={24} />
               <h2 className="text-white text-xl font-medium">Métodos de Pago y Cargos</h2>
             </div>
-            <button onClick={() => setPaymentModal({ isOpen: true, item: { name: "", surcharge: 0 } })} className="text-gray-400 hover:text-white transition-colors p-2 bg-[#2a2a2a] rounded-lg">
+            <button onClick={() => setPaymentModal({ isOpen: true, item: { name: "", surcharge: "" } })} className="text-gray-400 hover:text-white transition-colors p-2 bg-[#2a2a2a] rounded-lg">
               <Plus size={20} />
             </button>
           </div>
@@ -152,7 +154,7 @@ export function ConfiguracionView() {
                 <div className="flex-1"><span className="text-white font-medium">{method.name}</span></div>
                 <div className="text-gray-400 w-32 text-right">{method.surcharge > 0 ? `+${method.surcharge}%` : "0%"}</div>
                 <div className="flex gap-2">
-                  <button onClick={() => setPaymentModal({ isOpen: true, item: { ...method } })} className="text-gray-400 hover:text-white p-2 transition-colors"><Edit2 size={20} /></button>
+                  <button onClick={() => setPaymentModal({ isOpen: true, item: { ...method, surcharge: method.surcharge === 0 ? "" : String(method.surcharge) } })} className="text-gray-400 hover:text-white p-2 transition-colors"><Edit2 size={20} /></button>
                   <button onClick={() => handleRemovePayment(method.id)} className="text-gray-500 hover:text-red-500 p-2 transition-colors"><Trash2 size={20} /></button>
                 </div>
               </div>
@@ -168,7 +170,7 @@ export function ConfiguracionView() {
               <Receipt className="text-blue-500" size={24} />
               <h2 className="text-white text-xl font-medium">Gastos Fijos</h2>
             </div>
-            <button onClick={() => setExpenseModal({ isOpen: true, item: { name: "", amount: 0 } })} className="text-gray-400 hover:text-white transition-colors p-2 bg-[#2a2a2a] rounded-lg">
+            <button onClick={() => setExpenseModal({ isOpen: true, item: { name: "", amount: "" } })} className="text-gray-400 hover:text-white transition-colors p-2 bg-[#2a2a2a] rounded-lg">
               <Plus size={20} />
             </button>
           </div>
@@ -178,7 +180,7 @@ export function ConfiguracionView() {
                 <div className="flex-1"><span className="text-white font-medium">{expense.name}</span></div>
                 <div className="text-gray-400 w-40 text-right font-medium">${Number(expense.amount).toFixed(2)}</div>
                 <div className="flex gap-2">
-                  <button onClick={() => setExpenseModal({ isOpen: true, item: { ...expense } })} className="text-gray-400 hover:text-white p-2 transition-colors"><Edit2 size={20} /></button>
+                  <button onClick={() => setExpenseModal({ isOpen: true, item: { ...expense, amount: expense.amount === 0 ? "" : String(expense.amount) } })} className="text-gray-400 hover:text-white p-2 transition-colors"><Edit2 size={20} /></button>
                   <button onClick={() => handleRemoveExpense(expense.id)} className="text-gray-500 hover:text-red-500 p-2 transition-colors"><Trash2 size={20} /></button>
                 </div>
               </div>
@@ -229,7 +231,7 @@ export function ConfiguracionView() {
               </div>
               <div>
                 <label className="text-gray-400 text-sm block mb-2">Recargo (%)</label>
-                <input type="number" value={paymentModal.item.surcharge} onChange={(e) => setPaymentModal((prev) => ({ ...prev, item: { ...prev.item, surcharge: Number(e.target.value) } }))} onFocus={(e) => e.target.select()} className="w-full bg-[#2a2a2a] text-white rounded-xl px-4 py-3 border border-[#333] focus:border-[#6B21A8] outline-none" placeholder="0" min="0" step="0.01" />
+                <input type="number" value={paymentModal.item.surcharge} onChange={(e) => setPaymentModal((prev) => ({ ...prev, item: { ...prev.item, surcharge: e.target.value } }))} onFocus={(e) => e.target.select()} className="w-full bg-[#2a2a2a] text-white rounded-xl px-4 py-3 border border-[#333] focus:border-[#6B21A8] outline-none" placeholder="0" min="0" step="0.01" />
               </div>
             </div>
             <div className="p-6 border-t border-[#2a2a2a] flex gap-4">
@@ -255,7 +257,7 @@ export function ConfiguracionView() {
               </div>
               <div>
                 <label className="text-gray-400 text-sm block mb-2">Monto ($)</label>
-                <input type="number" value={expenseModal.item.amount} onChange={(e) => setExpenseModal((prev) => ({ ...prev, item: { ...prev.item, amount: Number(e.target.value) } }))} onFocus={(e) => e.target.select()} className="w-full bg-[#2a2a2a] text-white rounded-xl px-4 py-3 border border-[#333] focus:border-blue-500 outline-none" placeholder="0.00" min="0" step="0.01" />
+                <input type="number" value={expenseModal.item.amount} onChange={(e) => setExpenseModal((prev) => ({ ...prev, item: { ...prev.item, amount: e.target.value } }))} onFocus={(e) => e.target.select()} className="w-full bg-[#2a2a2a] text-white rounded-xl px-4 py-3 border border-[#333] focus:border-blue-500 outline-none" placeholder="0.00" min="0" step="0.01" />
               </div>
             </div>
             <div className="p-6 border-t border-[#2a2a2a] flex gap-4">

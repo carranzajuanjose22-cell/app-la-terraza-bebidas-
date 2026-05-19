@@ -5,31 +5,31 @@ const ICON_MAP = { Wine, Beer, Droplets, Layers, Package };
 export function ProductCard({ product, onAddToCart }) {
   const Icon = ICON_MAP[product.icon] || Package;
   return (
-    <div className="bg-[#1e1e1e] border border-[#2a2a2a] rounded-xl p-4 flex items-center justify-between hover:border-[#6B21A8]/50 transition-colors duration-300">
-      <div className="flex items-center gap-4">
-        <div className="w-11 h-11 rounded-xl bg-[#6B21A8]/20 flex items-center justify-center shrink-0">
-          <Icon size={22} className="text-[#8B5CF6]" />
+    <div className="bg-[#1e1e1e] border border-[#2a2a2a] rounded-xl p-3 md:p-4 flex items-center justify-between hover:border-[#6B21A8]/50 transition-colors duration-300">
+      <div className="flex items-center gap-3 md:gap-4 flex-1 min-w-0">
+        <div className="w-10 h-10 md:w-11 md:h-11 rounded-xl bg-[#6B21A8]/20 flex items-center justify-center shrink-0">
+          <Icon size={20} className="text-[#8B5CF6]" />
         </div>
-        <div>
-          <div className="flex items-center gap-3 mb-1">
-            <h3 className="text-white font-medium text-lg">{product.name}</h3>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+            <h3 className="text-white font-medium text-base md:text-lg leading-tight truncate">{product.name}</h3>
             {product.stock <= product.minStock && (
-              <span className="bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded text-xs font-medium border border-orange-500/20">
+              <span className="bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded text-xs font-medium border border-orange-500/20 shrink-0">
                 Stock Bajo
               </span>
             )}
           </div>
-          <p className="text-gray-400 text-sm">{product.category} · {product.stock} en stock</p>
+          <p className="text-gray-400 text-xs md:text-sm">{product.category} · {product.stock} en stock</p>
         </div>
       </div>
-      <div className="flex items-center gap-6">
-        <span className="text-[#8B5CF6] font-bold text-xl">${Number(product.price).toFixed(2)}</span>
+      <div className="flex items-center gap-3 md:gap-6 ml-2 shrink-0">
+        <span className="text-[#8B5CF6] font-bold text-base md:text-xl">${Number(product.price).toFixed(2)}</span>
         <button
           onClick={() => onAddToCart(product)}
-          className="bg-[#6B21A8] hover:bg-[#581C87] text-white px-4 h-10 rounded-lg flex items-center gap-2 transition-all hover:scale-105 active:scale-95 shadow-md shadow-[#6B21A8]/20"
+          className="bg-[#6B21A8] hover:bg-[#581C87] text-white px-3 md:px-4 h-9 md:h-10 rounded-lg flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 shadow-md shadow-[#6B21A8]/20"
         >
-          <ShoppingCart size={16} />
-          <Plus size={14} />
+          <ShoppingCart size={15} />
+          <Plus size={13} />
         </button>
       </div>
     </div>

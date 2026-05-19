@@ -7,7 +7,7 @@ import { Loader } from "./Loader.jsx";
 export function CajaView({ role = "admin", isCajaOpen, register, onOpenCaja, onCloseCaja, transactions, onRefresh }) {
   const [showClosureModal, setShowClosureModal] = useState(false);
   const [showOpenModal, setShowOpenModal] = useState(false);
-  const [openingAmount, setOpeningAmount] = useState("0");
+  const [openingAmount, setOpeningAmount] = useState("");
   const [expandedId, setExpandedId] = useState(null);
   const [searchDate, setSearchDate] = useState("");
   const [cajasCerradas, setCajasCerradas] = useState([]);
@@ -57,7 +57,7 @@ export function CajaView({ role = "admin", isCajaOpen, register, onOpenCaja, onC
   const initialCash = register?.initialCash || 0;
 
   return (
-    <div className="flex-1 p-8 overflow-y-auto relative">
+    <div className="flex-1 p-4 pb-20 md:p-8 overflow-y-auto relative">
       {loading && <Loader />}
       {role === "cajero" && !isCajaOpen && (
         <div className="absolute inset-0 z-50 backdrop-blur-md bg-[#121212]/60 flex items-center justify-center">
@@ -69,9 +69,9 @@ export function CajaView({ role = "admin", isCajaOpen, register, onOpenCaja, onC
         </div>
       )}
 
-      <div className="mb-8 flex items-start justify-between">
+      <div className="mb-6 md:mb-8 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
-          <h1 className="text-white text-4xl mb-2 flex items-center gap-4">
+          <h1 className="text-white text-2xl md:text-4xl mb-2 flex flex-wrap items-center gap-3 md:gap-4">
             Control de Caja
             {isCajaOpen ? (
               <span className="text-sm bg-green-500/20 text-green-400 px-3 py-1 rounded-full flex items-center gap-2">
@@ -89,18 +89,18 @@ export function CajaView({ role = "admin", isCajaOpen, register, onOpenCaja, onC
 
       {role === "admin" ? (
         <>
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-6">
-              <h2 className="text-white text-2xl">Historial de Cajas Cerradas</h2>
-              <input type="date" value={searchDate} onChange={(e) => setSearchDate(e.target.value)} className="bg-[#1a1a1a] text-gray-400 rounded-lg px-4 py-2 border border-[#2a2a2a] focus:border-[#6B21A8] outline-none text-sm cursor-pointer" />
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <h2 className="text-white text-lg md:text-2xl">Historial de Cajas Cerradas</h2>
+              <input type="date" value={searchDate} onChange={(e) => setSearchDate(e.target.value)} className="bg-[#1a1a1a] text-gray-400 rounded-lg px-4 py-2 border border-[#2a2a2a] focus:border-[#6B21A8] outline-none text-sm cursor-pointer w-full sm:w-auto" />
             </div>
             {isCajaOpen ? (
-              <button onClick={() => setShowClosureModal(true)} className="bg-[#6B21A8] hover:bg-[#581C87] text-white px-6 py-3 rounded-xl flex items-center gap-2 transition-all">
-                <Lock size={20} /> Cerrar Caja
+              <button onClick={() => setShowClosureModal(true)} className="bg-[#6B21A8] hover:bg-[#581C87] text-white px-4 md:px-6 py-2.5 md:py-3 rounded-xl flex items-center gap-2 transition-all text-sm md:text-base self-start sm:self-auto">
+                <Lock size={18} /> Cerrar Caja
               </button>
             ) : (
-              <button onClick={() => setShowOpenModal(true)} className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-xl flex items-center gap-2 transition-all">
-                <Unlock size={20} /> Abrir Caja
+              <button onClick={() => setShowOpenModal(true)} className="bg-green-600 hover:bg-green-700 text-white px-4 md:px-6 py-2.5 md:py-3 rounded-xl flex items-center gap-2 transition-all text-sm md:text-base self-start sm:self-auto">
+                <Unlock size={18} /> Abrir Caja
               </button>
             )}
           </div>
@@ -134,7 +134,7 @@ export function CajaView({ role = "admin", isCajaOpen, register, onOpenCaja, onC
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                               {[
                                 { label: "Fondo Inicial", value: `$${Number(caja.initialCash || 0).toFixed(2)}`, color: "text-white" },
-                                { label: "Efectivo Cobrado", value: `$${Number(caja.totalEfectivo || 0).toFixed(2)}`, color: "text-green-400" },
+                                { label: "Efectivo de Ventas", value: `$${Number(caja.totalEfectivo || 0).toFixed(2)}`, color: "text-green-400" },
                                 { label: "Transferencias / Otros", value: `$${Number(caja.totalTransferencia || 0).toFixed(2)}`, color: "text-blue-400" },
                                 { label: "Total Operaciones", value: caja.transactionsCount, color: "text-white" },
                               ].map(({ label, value, color }) => (
@@ -306,8 +306,9 @@ export function CajaView({ role = "admin", isCajaOpen, register, onOpenCaja, onC
                   { label: "Fecha:", value: new Date().toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" }) },
                   { label: "Transacciones:", value: transactions.length },
                   { label: "Fondo Inicial:", value: `$${initialCash.toFixed(2)}` },
-                  { label: "Efectivo en Caja (Ventas + Fondo):", value: `$${(totalEfectivo + initialCash).toFixed(2)}`, color: "text-green-400" },
-                  { label: "Total Transferencia:", value: `$${totalTransferencia.toFixed(2)}`, color: "text-blue-400" },
+                  { label: "Efectivo Cobrado (Ventas):", value: `$${totalEfectivo.toFixed(2)}`, color: "text-green-400" },
+                  { label: "Efectivo Total en Caja:", value: `$${(totalEfectivo + initialCash).toFixed(2)}`, color: "text-green-400" },
+                  { label: "Transferencias / Otros:", value: `$${totalTransferencia.toFixed(2)}`, color: "text-blue-400" },
                 ].map(({ label, value, color }) => (
                   <div key={label} className="flex items-center justify-between pb-4 border-b border-[#333]">
                     <span className="text-gray-400">{label}</span>
@@ -334,7 +335,7 @@ export function CajaView({ role = "admin", isCajaOpen, register, onOpenCaja, onC
             <div className="p-6 border-b border-[#2a2a2a]"><h2 className="text-white text-2xl flex items-center gap-2"><Unlock size={24} className="text-green-500" /> Abrir Caja</h2></div>
             <div className="p-6 space-y-4">
               <label className="text-gray-400 text-sm block">Monto inicial en caja (Cambio)</label>
-              <input type="number" value={openingAmount} onChange={(e) => setOpeningAmount(e.target.value)} className="w-full bg-[#2a2a2a] text-white rounded-xl px-4 py-4 border border-[#333] focus:border-green-500 outline-none" placeholder="0.00" step="0.01" min="0" />
+              <input type="number" value={openingAmount} onChange={(e) => setOpeningAmount(e.target.value)} onFocus={(e) => e.target.select()} className="w-full bg-[#2a2a2a] text-white rounded-xl px-4 py-4 border border-[#333] focus:border-green-500 outline-none" placeholder="0.00" step="0.01" min="0" />
             </div>
             <div className="p-6 border-t border-[#2a2a2a] flex gap-4">
               <button onClick={() => setShowOpenModal(false)} className="flex-1 bg-[#2a2a2a] hover:bg-[#333] text-white py-4 rounded-xl transition-all">Cancelar</button>

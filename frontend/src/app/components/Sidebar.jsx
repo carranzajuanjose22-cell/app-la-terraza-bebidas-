@@ -14,12 +14,45 @@ export function Sidebar({ activeView, onViewChange, role, onLogout }) {
   const visibleMenuItems = menuItems.filter((item) => item.roles.includes(role));
 
   return (
-    <div className="w-20 bg-[#1a1a1a] border-r border-[#2a2a2a] flex flex-col items-center py-6 h-screen sticky top-0">
-      <div className="mb-8 w-12 h-12 bg-[#6B21A8] rounded-lg flex items-center justify-center">
-        <span className="text-white font-bold text-xl">LT</span>
+    <>
+      {/* Sidebar desktop */}
+      <div className="hidden md:flex w-20 bg-[#1a1a1a] border-r border-[#2a2a2a] flex-col items-center py-6 h-screen sticky top-0 shrink-0">
+        <div className="mb-8 w-12 h-12 bg-[#6B21A8] rounded-lg flex items-center justify-center">
+          <span className="text-white font-bold text-xl">LT</span>
+        </div>
+
+        <div className="flex-1 flex flex-col gap-2 w-full px-3">
+          {visibleMenuItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeView === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => onViewChange(item.id)}
+                className={`w-full aspect-square rounded-lg flex flex-col items-center justify-center gap-1 transition-all ${
+                  isActive ? "bg-[#6B21A8] text-white" : "text-gray-400 hover:bg-[#2a2a2a] hover:text-white"
+                }`}
+              >
+                <Icon size={24} />
+                <span className="text-[10px]">{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="w-full px-3 mt-auto pt-4 border-t border-[#2a2a2a]">
+          <button
+            onClick={onLogout}
+            className="w-full aspect-square rounded-lg flex flex-col items-center justify-center gap-1 text-gray-400 hover:bg-[#2a2a2a] hover:text-white transition-all"
+          >
+            <LogOut size={24} />
+            <span className="text-[10px]">Salir</span>
+          </button>
+        </div>
       </div>
 
-      <div className="flex-1 flex flex-col gap-2 w-full px-3">
+      {/* Barra de navegación inferior — móvil */}
+      <nav className="fixed bottom-0 left-0 right-0 h-16 bg-[#1a1a1a] border-t border-[#2a2a2a] flex md:hidden z-40 safe-area-pb">
         {visibleMenuItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeView === item.id;
@@ -27,26 +60,23 @@ export function Sidebar({ activeView, onViewChange, role, onLogout }) {
             <button
               key={item.id}
               onClick={() => onViewChange(item.id)}
-              className={`w-full aspect-square rounded-lg flex flex-col items-center justify-center gap-1 transition-all ${
-                isActive ? "bg-[#6B21A8] text-white" : "text-gray-400 hover:bg-[#2a2a2a] hover:text-white"
+              className={`flex-1 flex flex-col items-center justify-center gap-0.5 transition-all active:scale-90 ${
+                isActive ? "text-[#8B5CF6]" : "text-gray-500"
               }`}
             >
-              <Icon size={24} />
-              <span className="text-[10px]">{item.label}</span>
+              <Icon size={20} />
+              <span className="text-[9px] leading-tight">{item.label}</span>
             </button>
           );
         })}
-      </div>
-
-      <div className="w-full px-3 mt-auto pt-4 border-t border-[#2a2a2a]">
         <button
           onClick={onLogout}
-          className="w-full aspect-square rounded-lg flex flex-col items-center justify-center gap-1 text-gray-400 hover:bg-[#2a2a2a] hover:text-white transition-all"
+          className="flex-1 flex flex-col items-center justify-center gap-0.5 text-gray-500 active:scale-90 transition-all"
         >
-          <LogOut size={24} />
-          <span className="text-[10px]">Salir</span>
+          <LogOut size={20} />
+          <span className="text-[9px] leading-tight">Salir</span>
         </button>
-      </div>
-    </div>
+      </nav>
+    </>
   );
 }

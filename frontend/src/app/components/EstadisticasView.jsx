@@ -96,16 +96,16 @@ export function EstadisticasView() {
   };
 
   return (
-    <div className="flex-1 p-8 overflow-y-auto relative">
+    <div className="flex-1 p-4 pb-20 md:p-8 overflow-y-auto relative">
       {loading && <Loader />}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 md:mb-8 gap-3">
         <div>
-          <h1 className="text-white text-4xl mb-2">Estadísticas</h1>
-          <p className="text-gray-400">Rendimiento y métricas de tu local</p>
+          <h1 className="text-white text-2xl md:text-4xl mb-1 md:mb-2">Estadísticas</h1>
+          <p className="text-gray-400 text-sm">Rendimiento y métricas de tu local</p>
         </div>
-        <div className="bg-[#1a1a1a] p-1 rounded-xl border border-[#2a2a2a] flex gap-1">
+        <div className="bg-[#1a1a1a] p-1 rounded-xl border border-[#2a2a2a] flex gap-1 self-start sm:self-auto">
           {["semanal", "mensual"].map((p) => (
-            <button key={p} onClick={() => setPeriod(p)} className={`px-6 py-2 rounded-lg text-sm font-medium transition-all ${period === p ? "bg-[#6B21A8] text-white" : "text-gray-400 hover:text-white"}`}>
+            <button key={p} onClick={() => setPeriod(p)} className={`px-4 md:px-6 py-2 rounded-lg text-sm font-medium transition-all ${period === p ? "bg-[#6B21A8] text-white" : "text-gray-400 hover:text-white"}`}>
               {p.charAt(0).toUpperCase() + p.slice(1)}
             </button>
           ))}

@@ -108,11 +108,11 @@ export function InventarioView() {
 
 
   return (
-    <div className="flex-1 p-8 overflow-y-auto relative">
+    <div className="flex-1 p-4 pb-20 md:p-8 overflow-y-auto relative">
       {loading && <Loader />}
-      <div className="mb-8">
-        <h1 className="text-white text-4xl mb-2">Gestión de Inventario</h1>
-        <p className="text-gray-400">Controlá tu stock y productos</p>
+      <div className="mb-6 md:mb-8">
+        <h1 className="text-white text-2xl md:text-4xl mb-1 md:mb-2">Gestión de Inventario</h1>
+        <p className="text-gray-400 text-sm">Controlá tu stock y productos</p>
       </div>
 
       {lowStockItems.length > 0 && (
@@ -134,22 +134,22 @@ export function InventarioView() {
         </div>
       )}
 
-      <div className="flex gap-4 mb-4">
+      <div className="flex flex-col sm:flex-row gap-3 mb-4">
         <div className="flex-1 relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-          <input type="text" placeholder="Buscar productos..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-[#2a2a2a] text-white rounded-xl pl-12 pr-4 py-4 border border-[#333] focus:border-[#6B21A8] outline-none" />
+          <input type="text" placeholder="Buscar productos..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-[#2a2a2a] text-white rounded-xl pl-12 pr-4 py-3 md:py-4 border border-[#333] focus:border-[#6B21A8] outline-none" />
         </div>
-        <button onClick={handleAddProduct} className="bg-[#6B21A8] hover:bg-[#581C87] text-white px-6 py-4 rounded-xl flex items-center gap-2 transition-all">
+        <button onClick={handleAddProduct} className="bg-[#6B21A8] hover:bg-[#581C87] text-white px-5 py-3 md:py-4 rounded-xl flex items-center justify-center gap-2 transition-all text-sm md:text-base shrink-0">
           <Plus size={20} /> Nuevo Producto
         </button>
       </div>
 
-      <div className="flex gap-3 flex-wrap mb-6">
+      <div className="flex gap-2 md:gap-3 overflow-x-auto pb-2 md:pb-0 md:flex-wrap mb-6 scrollbar-hide">
         {["Todos", ...allCategories].map((cat) => (
           <button
             key={cat}
             onClick={() => setSelectedCategory(cat)}
-            className={`px-5 py-2 rounded-lg text-sm transition-all ${
+            className={`px-4 md:px-5 py-2 rounded-lg text-sm transition-all whitespace-nowrap shrink-0 ${
               selectedCategory === cat
                 ? "bg-[#6B21A8] text-white"
                 : "bg-[#2a2a2a] text-gray-400 hover:bg-[#333]"
@@ -282,6 +282,7 @@ export function InventarioView() {
                       const val = e.target.value.replace(/[^0-9.]/g, "").replace(/^0+(?=\d)/, "");
                       setProductModal((prev) => ({ ...prev, item: { ...prev.item, [field]: val } }));
                     }}
+                    onFocus={(e) => e.target.select()}
                     placeholder="0"
                     className="w-full bg-[#2a2a2a] text-white rounded-xl px-4 py-3 border border-[#333] focus:border-[#6B21A8] outline-none"
                   />
@@ -300,6 +301,7 @@ export function InventarioView() {
                       const val = e.target.value.replace(/[^0-9]/g, "").replace(/^0+(?=\d)/, "");
                       setProductModal((prev) => ({ ...prev, item: { ...prev.item, [field]: val } }));
                     }}
+                    onFocus={(e) => e.target.select()}
                     placeholder="0"
                     className="w-full bg-[#2a2a2a] text-white rounded-xl px-4 py-3 border border-[#333] focus:border-[#6B21A8] outline-none"
                   />

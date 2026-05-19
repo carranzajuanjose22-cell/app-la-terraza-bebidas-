@@ -13,7 +13,17 @@ export async function getOpenRegister() {
 
 export async function openRegister(userId, initialCash) {
   const existing = await getOpenRegister();
-  if (existing) throw new Error("Ya hay una caja abierta");
+  if (existing) {
+    // Si la caja abierta es de un día anterior, la cerramos automáticamente
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const openedStr = (existing.openedAt || "").slice(0, 10);
+
+    if (openedStr && openedStr < todayStr) {
+      await closeRegister(existing.id);
+    } else {
+      throw new Error("Ya hay una caja abierta para hoy");
+    }
+  }
 
   const [register] = await db
     .insert(cashRegisters)
@@ -54,15 +64,10 @@ export async function closeRegister(registerId) {
     }
   }
 
-  // Restar extracciones / gastos diarios
-  const expenses = await db.select().from(dailyExpenses).where(eq(dailyExpenses.cashRegisterId, registerId));
-  for (const exp of expenses) {
-    if (exp.method === "efectivo") {
-      totalEfectivo -= exp.amount;
-    } else {
-      totalTransferencia -= exp.amount;
-    }
-  }
+  // Los gastos diarios / extracciones NO se restan del totalEfectivo.
+  // Se almacenan en la tabla dailyExpenses con cashRegisterId y se consultan
+  // por separado en getRegisterWithItems para mostrar el detalle.
+  // Restar gastos aquí producía valores negativos erróneos.
 
   const [closed] = await db
     .update(cashRegisters)

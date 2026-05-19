@@ -7,7 +7,7 @@ import { Loader } from "./Loader.jsx";
 export function InicioView({ isCajaOpen, onOpenCaja, onCloseCaja, transactions }) {
   const [showOpenModal, setShowOpenModal] = useState(false);
   const [showClosureModal, setShowClosureModal] = useState(false);
-  const [openingAmount, setOpeningAmount] = useState("0");
+  const [openingAmount, setOpeningAmount] = useState("");
   const [expenses, setExpenses] = useState([]);
   const [barBottles, setBarBottles] = useState([]);
   const [products, setProducts] = useState([]);
@@ -129,24 +129,24 @@ export function InicioView({ isCajaOpen, onOpenCaja, onCloseCaja, transactions }
   };
 
   return (
-    <div className="flex-1 p-8 overflow-y-auto relative">
+    <div className="flex-1 p-4 pb-20 md:p-8 overflow-y-auto relative">
       {loading && <Loader />}
-      <div className="flex items-start justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-6 md:mb-8 gap-3">
         <div>
-          <h1 className="text-white text-4xl mb-2">Panel de Inicio</h1>
-          <p className="text-gray-400">Resumen en vivo de tu negocio</p>
+          <h1 className="text-white text-2xl md:text-4xl mb-1 md:mb-2">Panel de Inicio</h1>
+          <p className="text-gray-400 text-sm">Resumen en vivo de tu negocio</p>
         </div>
-        <div className="flex gap-3">
-          <button onClick={() => setShowWithdrawModal(true)} className="bg-[#2a2a2a] hover:bg-[#333] text-gray-300 hover:text-white px-6 py-3 rounded-xl flex items-center gap-2 transition-all border border-[#333]">
-            <PackageMinus size={20} className="text-orange-400" /> Retirar Consumo
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={() => setShowWithdrawModal(true)} className="bg-[#2a2a2a] hover:bg-[#333] text-gray-300 hover:text-white px-3 md:px-6 py-2.5 md:py-3 rounded-xl flex items-center gap-2 transition-all border border-[#333] text-sm md:text-base">
+            <PackageMinus size={18} className="text-orange-400" /> <span>Retirar</span>
           </button>
           {isCajaOpen ? (
-            <button onClick={() => setShowClosureModal(true)} className="bg-[#6B21A8] hover:bg-[#581C87] text-white px-6 py-3 rounded-xl flex items-center gap-2 transition-all">
-              <Lock size={20} /> Cerrar Caja
+            <button onClick={() => setShowClosureModal(true)} className="bg-[#6B21A8] hover:bg-[#581C87] text-white px-3 md:px-6 py-2.5 md:py-3 rounded-xl flex items-center gap-2 transition-all text-sm md:text-base">
+              <Lock size={18} /> <span>Cerrar Caja</span>
             </button>
           ) : (
-            <button onClick={() => setShowOpenModal(true)} className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-xl flex items-center gap-2 transition-all">
-              <Unlock size={20} /> Abrir Caja
+            <button onClick={() => setShowOpenModal(true)} className="bg-green-600 hover:bg-green-700 text-white px-3 md:px-6 py-2.5 md:py-3 rounded-xl flex items-center gap-2 transition-all text-sm md:text-base">
+              <Unlock size={18} /> <span>Abrir Caja</span>
             </button>
           )}
         </div>
@@ -291,7 +291,7 @@ export function InicioView({ isCajaOpen, onOpenCaja, onCloseCaja, transactions }
             </div>
             <div className="p-6 space-y-4">
               <label className="text-gray-400 text-sm block">Monto inicial en caja (Cambio)</label>
-              <input type="number" value={openingAmount} onChange={(e) => setOpeningAmount(e.target.value)} className="w-full bg-[#2a2a2a] text-white rounded-xl px-4 py-4 border border-[#333] focus:border-green-500 outline-none" placeholder="0.00" step="0.01" min="0" />
+              <input type="number" value={openingAmount} onChange={(e) => setOpeningAmount(e.target.value)} onFocus={(e) => e.target.select()} className="w-full bg-[#2a2a2a] text-white rounded-xl px-4 py-4 border border-[#333] focus:border-green-500 outline-none" placeholder="0.00" step="0.01" min="0" />
             </div>
             <div className="p-6 border-t border-[#2a2a2a] flex gap-4">
               <button onClick={() => setShowOpenModal(false)} className="flex-1 bg-[#2a2a2a] hover:bg-[#333] text-white py-4 rounded-xl transition-all">Cancelar</button>

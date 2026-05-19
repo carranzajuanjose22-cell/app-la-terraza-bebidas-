@@ -62,15 +62,15 @@ export function UsuariosView() {
   };
 
   return (
-    <div className="flex-1 p-8 overflow-y-auto relative">
+    <div className="flex-1 p-4 pb-20 md:p-8 overflow-y-auto relative">
       {loading && <Loader />}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 md:mb-8 gap-3">
         <div>
-          <h1 className="text-white text-4xl mb-2">Gestión de Usuarios</h1>
-          <p className="text-gray-400">Administrá los accesos y roles del sistema</p>
+          <h1 className="text-white text-2xl md:text-4xl mb-1 md:mb-2">Gestión de Usuarios</h1>
+          <p className="text-gray-400 text-sm">Administrá los accesos y roles del sistema</p>
         </div>
-        <button onClick={handleAddUser} className="bg-[#6B21A8] hover:bg-[#581C87] text-white px-6 py-3 rounded-xl flex items-center gap-2 transition-all">
-          <UserPlus size={20} /> Nuevo Usuario
+        <button onClick={handleAddUser} className="bg-[#6B21A8] hover:bg-[#581C87] text-white px-4 md:px-6 py-2.5 md:py-3 rounded-xl flex items-center gap-2 transition-all text-sm md:text-base self-start sm:self-auto">
+          <UserPlus size={18} /> Nuevo Usuario
         </button>
       </div>
 
