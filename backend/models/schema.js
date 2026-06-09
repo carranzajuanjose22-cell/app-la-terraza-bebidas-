@@ -39,6 +39,7 @@ export const products = sqliteTable("products", {
   minStock: integer("min_stock").notNull().default(5),
   icon: text("icon").notNull().default("Package"),
   isAvailable: integer("is_available", { mode: "boolean" }).notNull().default(true),
+  isPromotion: integer("is_promotion", { mode: "boolean" }).notNull().default(false),
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
   updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
 });
@@ -161,6 +162,16 @@ export const internalWithdrawals = sqliteTable("internal_withdrawals", {
   quantity: integer("quantity").notNull(),
   cost: real("cost").notNull().default(0),
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+});
+
+// ─────────────────────────────────────────
+// ÍTEMS DE PROMOCIÓN (productos que la componen)
+// ─────────────────────────────────────────
+export const promotionItems = sqliteTable("promotion_items", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  promotionId: integer("promotion_id").notNull().references(() => products.id, { onDelete: "cascade" }),
+  productId: integer("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
+  quantity: integer("quantity").notNull().default(1),
 });
 
 // ─────────────────────────────────────────

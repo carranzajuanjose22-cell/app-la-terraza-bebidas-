@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Search, Plus, Edit2, Trash2, AlertTriangle, X, Package, Wine, Beer, Droplets, Layers } from "lucide-react";
+import { Search, Plus, Edit2, Trash2, AlertTriangle, X, Package, Wine, Beer, Droplets, Layers, Tag } from "lucide-react";
 import { Loader } from "./Loader.jsx";
 import { toast } from "sonner";
 import api from "../../services/api.js";
@@ -14,6 +14,8 @@ const ICON_OPTIONS = [
 
 const EMPTY_PRODUCT = { name: "", price: "", cost: "", category: "Vinos", stock: "", minStock: "", icon: "Package" };
 
+const EMPTY_PROMO = { name: "", cost: "", price: "", stock: "", minStock: "", items: [] };
+
 export function InventarioView() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("Todos");
@@ -24,6 +26,15 @@ export function InventarioView() {
   const [deleting, setDeleting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [showAllLowStock, setShowAllLowStock] = useState(false);
+
+  // Estado del modal de promoción
+  const [promoModal, setPromoModal] = useState({ open: false, editId: null });
+  const [promoForm, setPromoForm] = useState(EMPTY_PROMO);
+  const [addingItem, setAddingItem] = useState(false);
+  const [promoItemSelect, setPromoItemSelect] = useState({ productId: "", quantity: "1" });
+  const [submittingPromo, setSubmittingPromo] = useState(false);
+  const [loadingPromoItems, setLoadingPromoItems] = useState(false);
 
   async function fetchData() {
     try {
@@ -84,8 +95,6 @@ export function InventarioView() {
       } else {
         await api.put(`/products/${productModal.item.id}`, payload);
         toast.success("Producto actualizado exitosamente");
-        
-        // Si el stock fue modificado manualmente, registramos el evento
         if (oldStock !== payload.stock) {
           await api.post("/stats/stock-modifications", {
             productId: productModal.item.id,
@@ -104,8 +113,145 @@ export function InventarioView() {
     }
   };
 
-  const allCategories = categories.length > 0 ? categories : ["Vinos", "Cervezas", "Espirituosas"];
+  // ── Promociones ──────────────────────────────────────────────────────────────
 
+  const nonPromoProducts = inventory.filter((p) => !p.isPromotion);
+
+  const promoItems = promoForm.items ?? [];
+
+  // Stock calculado automáticamente = mínimo de (stock_componente / cantidad_requerida)
+  const calcPromoStock =
+    promoItems.length === 0
+      ? 0
+      : Math.min(
+          ...promoItems.map((item) => {
+            const prod = nonPromoProducts.find((p) => p.id === item.productId);
+            return prod ? Math.floor(prod.stock / item.quantity) : 0;
+          })
+        );
+
+  // Nombre del producto que limita el stock de la promo
+  const bottleneckItem =
+    promoItems.length === 0
+      ? null
+      : promoItems.reduce((worst, item) => {
+          const prod = nonPromoProducts.find((p) => p.id === item.productId);
+          const available = prod ? Math.floor(prod.stock / item.quantity) : 0;
+          if (!worst) return { ...item, available };
+          const worstProd = nonPromoProducts.find((p) => p.id === worst.productId);
+          const worstAvail = worstProd ? Math.floor(worstProd.stock / worst.quantity) : 0;
+          return available < worstAvail ? { ...item, available } : worst;
+        }, null);
+
+  const openPromoModal = () => {
+    setPromoForm(EMPTY_PROMO);
+    setAddingItem(false);
+    setPromoItemSelect({ productId: "", quantity: "1" });
+    setPromoModal({ open: true, editId: null });
+  };
+
+  const openEditPromoModal = async (product) => {
+    if (promoModal.open || loadingPromoItems) return; // evitar doble apertura
+
+    // Abrir el modal inmediatamente con los datos que ya tenemos en memoria
+    setPromoForm({
+      name: product.name,
+      cost: String(product.cost ?? ""),
+      price: String(product.price ?? ""),
+      minStock: String(product.minStock ?? ""),
+      items: null, // null = cargando
+    });
+    setAddingItem(false);
+    setPromoItemSelect({ productId: "", quantity: "1" });
+    setPromoModal({ open: true, editId: product.id });
+
+    // Cargar los items de la promo en segundo plano
+    setLoadingPromoItems(true);
+    try {
+      const res = await api.get(`/products/${product.id}`);
+      const data = res.data;
+      setPromoForm((prev) => ({
+        ...prev,
+        items: (data.promotionItems || []).map((item) => {
+          const prod = inventory.find((p) => p.id === item.productId);
+          return {
+            productId: item.productId,
+            productName: prod?.name || `Producto #${item.productId}`,
+            quantity: item.quantity,
+          };
+        }),
+      }));
+    } catch {
+      toast.error("Error al cargar los productos de la promoción");
+      setPromoForm((prev) => ({ ...prev, items: [] }));
+    } finally {
+      setLoadingPromoItems(false);
+    }
+  };
+
+  const closePromoModal = () => {
+    setPromoModal({ open: false, editId: null });
+  };
+
+  const handleAddPromoItem = () => {
+    if (promoForm.items === null) return;
+    const pid = Number(promoItemSelect.productId);
+    const qty = parseInt(promoItemSelect.quantity, 10) || 1;
+    if (!pid) { toast.error("Seleccioná un producto"); return; }
+    if (promoItems.some((i) => i.productId === pid)) {
+      toast.error("Ese producto ya fue agregado");
+      return;
+    }
+    const product = nonPromoProducts.find((p) => p.id === pid);
+    setPromoForm((prev) => ({
+      ...prev,
+      items: [...(prev.items ?? []), { productId: pid, productName: product?.name || "", quantity: qty }],
+    }));
+    setPromoItemSelect({ productId: "", quantity: "1" });
+    setAddingItem(false);
+  };
+
+  const handleRemovePromoItem = (index) => {
+    setPromoForm((prev) => ({ ...prev, items: (prev.items ?? []).filter((_, i) => i !== index) }));
+  };
+
+  const handleSavePromo = async () => {
+    if (!promoForm.name.trim()) { toast.error("El nombre de la promoción es obligatorio"); return; }
+    if (promoForm.items === null) { toast.error("Los productos aún están cargando, esperá un momento"); return; }
+    if (promoForm.items.length === 0) { toast.error("Agregá al menos un producto a la promoción"); return; }
+    if (submittingPromo) return;
+    setSubmittingPromo(true);
+    try {
+      const payload = {
+        name: promoForm.name.trim(),
+        category: "Promocion",
+        icon: "Layers",
+        isPromotion: true,
+        cost: parseFloat(promoForm.cost) || 0,
+        price: parseFloat(promoForm.price) || 0,
+        stock: calcPromoStock,
+        minStock: parseInt(promoForm.minStock, 10) || 0,
+        promotionItems: promoItems.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+      };
+
+      if (promoModal.editId) {
+        console.log("[guardarPromo] payload enviado:", JSON.stringify(payload, null, 2));
+        await api.put(`/products/${promoModal.editId}`, payload);
+        toast.success("Promoción actualizada exitosamente");
+      } else {
+        await api.post("/products", payload);
+        toast.success("Promoción creada exitosamente");
+      }
+      closePromoModal();
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Error al guardar la promoción");
+    } finally {
+      setSubmittingPromo(false);
+    }
+  };
+
+  const allCategories = categories.length > 0 ? categories : ["Vinos", "Cervezas", "Espirituosas"];
 
   return (
     <div className="flex-1 p-4 pb-20 md:p-8 overflow-y-auto relative">
@@ -121,14 +267,22 @@ export function InventarioView() {
             <AlertTriangle className="text-orange-500 flex-shrink-0" size={24} />
             <div className="flex-1">
               <h3 className="text-orange-500 font-bold mb-2">Alerta de Stock Bajo</h3>
-              <p className="text-orange-400 text-sm mb-3">{lowStockItems.length} productos en su límite mínimo o por debajo.</p>
+              <p className="text-orange-400 text-sm mb-3">{lowStockItems.length} producto{lowStockItems.length !== 1 ? "s" : ""} en su límite mínimo o por debajo.</p>
               <div className="flex flex-wrap gap-2">
-                {lowStockItems.map((item) => (
+                {(showAllLowStock ? lowStockItems : lowStockItems.slice(0, 4)).map((item) => (
                   <span key={item.id} className="bg-orange-500/20 text-orange-300 px-3 py-1 rounded-full text-sm">
                     {item.name}: {item.stock} unidades
                   </span>
                 ))}
               </div>
+              {lowStockItems.length > 4 && (
+                <button
+                  onClick={() => setShowAllLowStock((v) => !v)}
+                  className="mt-3 text-orange-400 hover:text-orange-300 text-sm underline underline-offset-2 transition-colors"
+                >
+                  {showAllLowStock ? "Ver menos" : `Ver ${lowStockItems.length - 4} más`}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -139,6 +293,9 @@ export function InventarioView() {
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
           <input type="text" placeholder="Buscar productos..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-[#2a2a2a] text-white rounded-xl pl-12 pr-4 py-3 md:py-4 border border-[#333] focus:border-[#6B21A8] outline-none" />
         </div>
+        <button onClick={openPromoModal} className="bg-[#1e3a5f] hover:bg-[#1a3254] text-white px-5 py-3 md:py-4 rounded-xl flex items-center justify-center gap-2 transition-all text-sm md:text-base shrink-0">
+          <Tag size={18} /> Nueva Promoción
+        </button>
         <button onClick={handleAddProduct} className="bg-[#6B21A8] hover:bg-[#581C87] text-white px-5 py-3 md:py-4 rounded-xl flex items-center justify-center gap-2 transition-all text-sm md:text-base shrink-0">
           <Plus size={20} /> Nuevo Producto
         </button>
@@ -180,7 +337,12 @@ export function InventarioView() {
                 const lowStock = product.stock <= product.minStock;
                 return (
                   <tr key={product.id} className="border-b border-[#2a2a2a] hover:bg-[#2a2a2a] transition-colors">
-                    <td className="p-4"><span className="text-white">{product.name}</span></td>
+                    <td className="p-4">
+                      <div className="flex items-center gap-2">
+                        {product.isPromotion && <Tag size={14} className="text-blue-400 shrink-0" />}
+                        <span className="text-white">{product.name}</span>
+                      </div>
+                    </td>
                     <td className="p-4"><span className="text-gray-400">{product.category}</span></td>
                     <td className="p-4"><span className="text-gray-400">${Number(product.cost || 0).toFixed(2)}</span></td>
                     <td className="p-4"><span className="text-white">${Number(product.price).toFixed(2)}</span></td>
@@ -193,13 +355,24 @@ export function InventarioView() {
                     </td>
                     <td className="p-4 text-center">
                       <div className="flex items-center justify-center gap-3">
-                        <button
-                          onClick={() => setProductModal({ isOpen: true, item: { ...product, price: String(product.price), cost: String(product.cost ?? ""), stock: String(product.stock), minStock: String(product.minStock), icon: product.icon || "Package" }, isNew: false })}
-                          className="text-gray-400 hover:text-white transition-colors p-1"
-                          title="Editar producto"
-                        >
-                          <Edit2 size={18} />
-                        </button>
+                        {product.isPromotion ? (
+                          <button
+                            onClick={() => openEditPromoModal(product)}
+                            disabled={promoModal.open || loadingPromoItems}
+                            className="text-gray-400 hover:text-blue-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors p-1"
+                            title="Editar promoción"
+                          >
+                            <Edit2 size={18} />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => setProductModal({ isOpen: true, item: { ...product, price: String(product.price), cost: String(product.cost ?? ""), stock: String(product.stock), minStock: String(product.minStock), icon: product.icon || "Package" }, isNew: false })}
+                            className="text-gray-400 hover:text-white transition-colors p-1"
+                            title="Editar producto"
+                          >
+                            <Edit2 size={18} />
+                          </button>
+                        )}
                         <button
                           onClick={() => setDeleteModal({ isOpen: true, product })}
                           className="text-gray-400 hover:text-red-500 transition-colors p-1"
@@ -217,6 +390,7 @@ export function InventarioView() {
         </div>
       </div>
 
+      {/* ── Modal: Nuevo Producto ──────────────────────────────────────────── */}
       {productModal.isOpen && productModal.item && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-[#1a1a1a] rounded-2xl w-full max-w-md border border-[#2a2a2a] max-h-[90vh] flex flex-col">
@@ -238,7 +412,6 @@ export function InventarioView() {
                   <input type={type} value={productModal.item[field]} onChange={(e) => setProductModal((prev) => ({ ...prev, item: { ...prev.item, [field]: e.target.value } }))} className="w-full bg-[#2a2a2a] text-white rounded-xl px-4 py-3 border border-[#333] focus:border-[#6B21A8] outline-none" placeholder={placeholder} />
                 </div>
               ))}
-              {/* Selector de ícono */}
               <div>
                 <label className="text-gray-400 text-sm block mb-2">Ícono del producto</label>
                 <div className="flex gap-2">
@@ -317,7 +490,232 @@ export function InventarioView() {
         </div>
       )}
 
-      {/* Modal de confirmación de eliminación */}
+      {/* ── Modal: Nueva / Editar Promoción ───────────────────────────────── */}
+      {promoModal.open && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#1a1a1a] rounded-2xl w-full max-w-lg border border-[#2a2a2a] max-h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="p-6 border-b border-[#2a2a2a] flex items-center justify-between shrink-0">
+              <h2 className="text-white text-2xl flex items-center gap-2">
+                <Tag size={22} className="text-blue-400" />
+                {promoModal.editId ? "Editar Promoción" : "Nueva Promoción"}
+              </h2>
+              <button onClick={closePromoModal} className="text-gray-400 hover:text-white transition-colors">
+                <X size={24} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-5 overflow-y-auto">
+
+              {/* Nombre */}
+              <div>
+                <label className="text-gray-400 text-sm block mb-2">Nombre de la promoción</label>
+                <input
+                  type="text"
+                  placeholder="Ej. Promo Cerveza + Shot"
+                  value={promoForm.name}
+                  onChange={(e) => setPromoForm((p) => ({ ...p, name: e.target.value }))}
+                  className="w-full bg-[#2a2a2a] text-white rounded-xl px-4 py-3 border border-[#333] focus:border-blue-500 outline-none"
+                />
+              </div>
+
+              {/* Categoría fija */}
+              <div>
+                <label className="text-gray-400 text-sm block mb-2">Categoría</label>
+                <div className="w-full bg-[#2a2a2a]/60 text-gray-500 rounded-xl px-4 py-3 border border-[#333] flex items-center gap-2 cursor-not-allowed select-none">
+                  <Layers size={16} className="text-blue-400" />
+                  Promocion
+                </div>
+              </div>
+
+              {/* Productos de la promo */}
+              <div>
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <p className="text-white font-medium text-sm">Productos que conforman la promoción</p>
+                    <p className="text-gray-500 text-xs mt-0.5">Seleccioná los productos que incluye esta promoción</p>
+                  </div>
+                  {!addingItem && (
+                    <button
+                      onClick={() => { setAddingItem(true); setPromoItemSelect({ productId: nonPromoProducts[0]?.id?.toString() || "", quantity: "1" }); }}
+                      className="bg-[#6B21A8] hover:bg-[#581C87] text-white px-3 py-1.5 rounded-lg flex items-center gap-1 text-sm transition-all shrink-0 ml-3"
+                    >
+                      <Plus size={14} /> Agregar
+                    </button>
+                  )}
+                </div>
+
+                {/* Formulario inline para agregar producto */}
+                {addingItem && (
+                  <div className="bg-[#2a2a2a] rounded-xl p-4 mb-3 space-y-3">
+                    {/* Select con stock visible */}
+                    <select
+                      value={promoItemSelect.productId}
+                      onChange={(e) => setPromoItemSelect((p) => ({ ...p, productId: e.target.value }))}
+                      className="w-full bg-[#333] text-white rounded-lg px-3 py-2.5 border border-[#444] focus:border-blue-500 outline-none text-sm"
+                    >
+                      <option value="">— Seleccioná un producto —</option>
+                      {nonPromoProducts.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}{"  ·  "}Stock: {p.stock}
+                        </option>
+                      ))}
+                    </select>
+
+                    {/* Cantidad con +/− y botones de acción */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-gray-400 text-sm shrink-0">Cantidad:</span>
+                      <div className="flex items-center rounded-lg border border-[#444] overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => setPromoItemSelect((p) => ({ ...p, quantity: String(Math.max(1, parseInt(p.quantity || 1) - 1)) }))}
+                          className="px-3 py-2 text-gray-300 hover:text-white bg-[#333] hover:bg-[#444] transition-colors text-base leading-none"
+                        >
+                          −
+                        </button>
+                        <span className="px-4 py-2 text-white text-sm min-w-[3rem] text-center bg-[#2d2d2d]">
+                          {promoItemSelect.quantity || 1}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setPromoItemSelect((p) => ({ ...p, quantity: String(parseInt(p.quantity || 1) + 1) }))}
+                          className="px-3 py-2 text-gray-300 hover:text-white bg-[#333] hover:bg-[#444] transition-colors text-base leading-none"
+                        >
+                          +
+                        </button>
+                      </div>
+                      <div className="flex-1" />
+                      <button
+                        onClick={handleAddPromoItem}
+                        className="bg-[#6B21A8] hover:bg-[#581C87] text-white px-4 py-2 rounded-lg text-sm transition-all flex items-center gap-1 shrink-0"
+                      >
+                        <Plus size={14} /> Agregar
+                      </button>
+                      <button
+                        onClick={() => setAddingItem(false)}
+                        className="bg-[#333] hover:bg-[#444] text-gray-400 hover:text-white p-2 rounded-lg transition-all shrink-0"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Lista de productos seleccionados */}
+                {promoForm.items === null ? (
+                  <div className="text-gray-500 text-sm text-center py-4 bg-[#2a2a2a]/40 rounded-xl border border-dashed border-[#333] flex items-center justify-center gap-2">
+                    <span className="animate-spin inline-block w-3 h-3 border-2 border-gray-500 border-t-transparent rounded-full" />
+                    Cargando productos...
+                  </div>
+                ) : promoItems.length === 0 ? (
+                  <div className="text-gray-600 text-sm text-center py-4 bg-[#2a2a2a]/40 rounded-xl border border-dashed border-[#333]">
+                    Sin productos agregados
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {promoItems.map((item, i) => (
+                      <div key={i} className="flex items-center justify-between bg-[#2a2a2a] rounded-xl px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <Package size={14} className="text-gray-500" />
+                          <span className="text-white text-sm">{item.productName}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-gray-400 text-sm bg-[#333] px-2 py-0.5 rounded-md">x{item.quantity}</span>
+                          <button onClick={() => handleRemovePromoItem(i)} className="text-gray-500 hover:text-red-500 transition-colors">
+                            <X size={15} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Mensaje de limitación debajo de la lista */}
+                {bottleneckItem && promoItems.length > 0 && (
+                  <p className="text-gray-500 text-xs mt-2">
+                    El stock estará limitado por <span className="text-gray-300">{bottleneckItem.productName}</span> ({bottleneckItem.available} disponibles)
+                  </p>
+                )}
+              </div>
+
+              {/* Costo y Precio */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-gray-400 text-sm block mb-2">Costo UNITARIO ($)</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0"
+                    value={promoForm.cost}
+                    onChange={(e) => setPromoForm((p) => ({ ...p, cost: e.target.value.replace(/[^0-9.]/g, "").replace(/^0+(?=\d)/, "") }))}
+                    onFocus={(e) => e.target.select()}
+                    className="w-full bg-[#2a2a2a] text-white rounded-xl px-4 py-3 border border-[#333] focus:border-blue-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-gray-400 text-sm block mb-2">Precio ($)</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0"
+                    value={promoForm.price}
+                    onChange={(e) => setPromoForm((p) => ({ ...p, price: e.target.value.replace(/[^0-9.]/g, "").replace(/^0+(?=\d)/, "") }))}
+                    onFocus={(e) => e.target.select()}
+                    className="w-full bg-[#2a2a2a] text-white rounded-xl px-4 py-3 border border-[#333] focus:border-blue-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Stock */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-gray-400 text-sm block mb-2">Stock actual</label>
+                  <div className="w-full bg-[#1f1f1f] text-white rounded-xl px-4 py-3 border border-[#2a2a2a] flex items-center justify-between cursor-not-allowed select-none">
+                    <span className={`text-lg font-semibold ${calcPromoStock === 0 && promoItems.length > 0 ? "text-red-400" : "text-white"}`}>
+                      {calcPromoStock}
+                    </span>
+                    <span className="text-gray-600 text-xs">auto</span>
+                  </div>
+                  {calcPromoStock === 0 && promoItems.length > 0 && (
+                    <p className="text-red-400 text-xs mt-1">Sin stock suficiente — no se podrá vender</p>
+                  )}
+                </div>
+                <div>
+                  <label className="text-gray-400 text-sm block mb-2">Stock mínimo</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="0"
+                    value={promoForm.minStock}
+                    onChange={(e) => setPromoForm((p) => ({ ...p, minStock: e.target.value.replace(/[^0-9]/g, "") }))}
+                    onFocus={(e) => e.target.select()}
+                    className="w-full bg-[#2a2a2a] text-white rounded-xl px-4 py-3 border border-[#333] focus:border-blue-500 outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-6 border-t border-[#2a2a2a] flex gap-4 shrink-0">
+              <button onClick={closePromoModal} className="flex-1 bg-[#2a2a2a] hover:bg-[#333] text-white py-4 rounded-xl transition-all">
+                Cancelar
+              </button>
+              <button
+                onClick={handleSavePromo}
+                disabled={submittingPromo}
+                className="flex-1 bg-blue-700 hover:bg-blue-800 disabled:opacity-60 disabled:cursor-not-allowed text-white py-4 rounded-xl transition-all"
+              >
+                {submittingPromo
+                  ? (promoModal.editId ? "Guardando..." : "Creando...")
+                  : (promoModal.editId ? "Guardar Cambios" : "Crear Promoción")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: Confirmar eliminación ──────────────────────────────────── */}
       {deleteModal.isOpen && deleteModal.product && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-[#1a1a1a] rounded-2xl w-full max-w-sm border border-[#2a2a2a]">

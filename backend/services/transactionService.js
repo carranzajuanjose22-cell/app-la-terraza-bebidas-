@@ -1,6 +1,7 @@
 import { eq, desc, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { transactions, transactionItems, transactionPayments, products } from "../models/schema.js";
+import { transactions, transactionItems, transactionPayments, products, promotionItems } from "../models/schema.js";
+import { recalcPromotionsForProduct } from "./productService.js";
 
 export async function getTransactionsByRegister(cashRegisterId) {
   const txs = await db
@@ -31,8 +32,28 @@ export async function createTransaction(data, userId, cashRegisterId) {
       if (!item.productId) continue;
       const [product] = await db.select().from(products).where(eq(products.id, item.productId)).limit(1);
       if (!product) throw new Error(`Producto no encontrado: ${item.name}`);
-      if (product.stock < item.quantity) {
-        throw new Error(`Stock insuficiente para "${product.name}": hay ${product.stock} unidad${product.stock === 1 ? "" : "es"}, se piden ${item.quantity}`);
+
+      if (product.isPromotion) {
+        // Validar stock de cada componente de la promoción
+        const components = await db.select().from(promotionItems).where(eq(promotionItems.promotionId, product.id));
+        for (const comp of components) {
+          const [compProduct] = await db.select().from(products).where(eq(products.id, comp.productId)).limit(1);
+          if (!compProduct) continue;
+          const needed = comp.quantity * item.quantity;
+          if (compProduct.stock < needed) {
+            throw new Error(
+              `Stock insuficiente para "${compProduct.name}" (parte de la promoción "${product.name}"): hay ${compProduct.stock} unidad${compProduct.stock === 1 ? "" : "es"}, se necesitan ${needed}`
+            );
+          }
+        }
+        // También verificar el stock de la propia promoción
+        if (product.stock < item.quantity) {
+          throw new Error(`Stock insuficiente para la promoción "${product.name}": hay ${product.stock}, se piden ${item.quantity}`);
+        }
+      } else {
+        if (product.stock < item.quantity) {
+          throw new Error(`Stock insuficiente para "${product.name}": hay ${product.stock} unidad${product.stock === 1 ? "" : "es"}, se piden ${item.quantity}`);
+        }
       }
     }
   }
@@ -59,13 +80,40 @@ export async function createTransaction(data, userId, cashRegisterId) {
     );
 
     // Descontar stock de cada producto vendido
+    const affectedComponentIds = new Set();
+
     for (const item of data.items) {
-      if (item.productId) {
+      if (!item.productId) continue;
+      const [product] = await db.select().from(products).where(eq(products.id, item.productId)).limit(1);
+
+      if (product?.isPromotion) {
+        // Descontar stock de cada componente de la promoción
+        const components = await db.select().from(promotionItems).where(eq(promotionItems.promotionId, item.productId));
+        for (const comp of components) {
+          const deduct = comp.quantity * item.quantity;
+          await db
+            .update(products)
+            .set({ stock: sql`MAX(0, stock - ${deduct})` })
+            .where(eq(products.id, comp.productId));
+          affectedComponentIds.add(comp.productId);
+        }
+        // También descontar el stock de la promoción misma
         await db
           .update(products)
           .set({ stock: sql`MAX(0, stock - ${item.quantity})` })
           .where(eq(products.id, item.productId));
+      } else {
+        await db
+          .update(products)
+          .set({ stock: sql`MAX(0, stock - ${item.quantity})` })
+          .where(eq(products.id, item.productId));
+        affectedComponentIds.add(item.productId);
       }
+    }
+
+    // Recalcular el stock de todas las promos afectadas por cambios en sus componentes
+    for (const productId of affectedComponentIds) {
+      await recalcPromotionsForProduct(productId);
     }
   }
 

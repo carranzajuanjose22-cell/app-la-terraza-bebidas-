@@ -20,14 +20,20 @@ export async function getProduct(req, res) {
 
 export async function createProduct(req, res) {
   try {
-    const { name, price, cost, category, stock, minStock } = req.body;
+    const { name, price, cost, category, stock, minStock, icon, isPromotion, promotionItems } = req.body;
     if (!name || price === undefined) {
       return res.status(400).json({ message: "Nombre y precio son requeridos" });
     }
     const product = await productService.createProduct({
-      name, price: Number(price), cost: Number(cost || 0),
-      category: category || "General", stock: Number(stock || 0),
+      name,
+      price: Number(price),
+      cost: Number(cost || 0),
+      category: isPromotion ? "Promocion" : (category || "General"),
+      stock: Number(stock || 0),
       minStock: Number(minStock || 5),
+      icon: isPromotion ? "Layers" : (icon || "Package"),
+      isPromotion: !!isPromotion,
+      promotionItems: Array.isArray(promotionItems) ? promotionItems : [],
     });
     res.status(201).json(product);
   } catch (error) {
