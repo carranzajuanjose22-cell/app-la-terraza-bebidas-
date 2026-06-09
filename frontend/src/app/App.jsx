@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Toaster } from "sonner";
+import { useState, useEffect, useRef } from "react";
+import { Toaster, toast } from "sonner";
 import { Sidebar } from "./components/Sidebar.jsx";
 import { VentasView } from "./components/VentasView.jsx";
 import { InventarioView } from "./components/InventarioView.jsx";
@@ -12,12 +12,32 @@ import { UsuariosView } from "./components/UsuariosView.jsx";
 import { Loader } from "./components/Loader.jsx";
 import api from "../services/api.js";
 
+// Decodifica el payload del JWT sin librería externa
+function getTokenExpiry(token) {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return payload.exp ? payload.exp * 1000 : null; // convertir a ms
+  } catch {
+    return null;
+  }
+}
+
 export default function App() {
   const [activeView, setActiveView] = useState("ventas");
   const [user, setUser] = useState(() => {
     const stored = localStorage.getItem("user");
-    return stored ? JSON.parse(stored) : null;
+    const token = localStorage.getItem("token");
+    if (!stored || !token) return null;
+    // Verificar si el token ya expiró al cargar la app
+    const expiry = getTokenExpiry(token);
+    if (expiry && Date.now() > expiry) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      return null;
+    }
+    return JSON.parse(stored);
   });
+  const expiryTimerRef = useRef(null);
 
   // Estado de caja (sincronizado con el backend)
   const [cajaStatus, setCajaStatus] = useState({ isOpen: false, register: null });
@@ -99,6 +119,7 @@ export default function App() {
   }
 
   function handleLogout() {
+    if (expiryTimerRef.current) clearTimeout(expiryTimerRef.current);
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     setUser(null);
@@ -107,8 +128,46 @@ export default function App() {
     setTransactions([]);
   }
 
+  // Programar cierre de sesión automático cuando el token expire
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!user || !token) return;
+
+    const expiry = getTokenExpiry(token);
+    if (!expiry) return;
+
+    const msUntilExpiry = expiry - Date.now();
+    if (msUntilExpiry <= 0) {
+      handleLogout();
+      toast.warning("Tu sesión expiró. Iniciá sesión nuevamente.");
+      return;
+    }
+
+    expiryTimerRef.current = setTimeout(() => {
+      handleLogout();
+      toast.warning("Tu sesión expiró. Iniciá sesión nuevamente.");
+    }, msUntilExpiry);
+
+    return () => { if (expiryTimerRef.current) clearTimeout(expiryTimerRef.current); };
+  }, [user]);
+
+  // Escuchar el evento de sesión expirada lanzado por el interceptor de Axios (401)
+  useEffect(() => {
+    const onExpired = () => {
+      handleLogout();
+      toast.warning("Tu sesión expiró. Iniciá sesión nuevamente.");
+    };
+    window.addEventListener("session-expired", onExpired);
+    return () => window.removeEventListener("session-expired", onExpired);
+  }, []);
+
   if (!user) {
-    return <LoginView onLogin={handleLogin} />;
+    return (
+      <>
+        <Toaster theme="dark" position="top-right" />
+        <LoginView onLogin={handleLogin} />
+      </>
+    );
   }
 
   return (
