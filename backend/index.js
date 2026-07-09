@@ -4,6 +4,7 @@ import cors from "cors";
 
 import authRoutes from "./routes/authRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
+import subscriptionRoutes from "./routes/subscriptionRoutes.js";
 import productRoutes from "./routes/productRoutes.js";
 import categoryRoutes from "./routes/categoryRoutes.js";
 import paymentMethodRoutes from "./routes/paymentMethodRoutes.js";
@@ -45,6 +46,7 @@ app.get("/health", (req, res) => res.json({ status: "ok" }));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/subscription", subscriptionRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/payment-methods", paymentMethodRoutes);

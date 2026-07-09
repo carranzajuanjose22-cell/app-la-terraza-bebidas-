@@ -11,6 +11,9 @@ import { EstadisticasView } from "./components/EstadisticasView.jsx";
 import { UsuariosView } from "./components/UsuariosView.jsx";
 import { Loader } from "./components/Loader.jsx";
 import api from "../services/api.js";
+import { SubscriptionProvider } from "./modules/subscription/SubscriptionContext.jsx";
+import { SubscriptionOverlay } from "./modules/subscription/SubscriptionOverlay.jsx";
+import { CreatorDashboard } from "./modules/subscription/CreatorDashboard.jsx";
 
 // Decodifica el payload del JWT sin librería externa
 function getTokenExpiry(token) {
@@ -115,7 +118,9 @@ export default function App() {
 
   function handleLogin(loggedUser) {
     setUser(loggedUser);
-    setActiveView(loggedUser.role === "admin" ? "inicio" : "ventas");
+    if (loggedUser.role !== "creator") {
+      setActiveView(loggedUser.role === "admin" ? "inicio" : "ventas");
+    }
   }
 
   function handleLogout() {
@@ -170,9 +175,21 @@ export default function App() {
     );
   }
 
+  // El creator tiene su propio panel separado
+  if (user.role === "creator") {
+    return (
+      <SubscriptionProvider>
+        <Toaster theme="dark" position="top-right" />
+        <CreatorDashboard onLogout={handleLogout} />
+      </SubscriptionProvider>
+    );
+  }
+
   return (
+    <SubscriptionProvider>
     <div className="size-full flex bg-[#121212] dark relative overflow-x-hidden" style={{ minHeight: "100vh" }}>
       {appLoading && <Loader fullScreen />}
+      <SubscriptionOverlay onLogout={handleLogout} userRole={user.role} />
       <Sidebar
         activeView={activeView}
         onViewChange={setActiveView}
@@ -212,5 +229,6 @@ export default function App() {
 
       <Toaster theme="dark" position="top-right" />
     </div>
+    </SubscriptionProvider>
   );
 }

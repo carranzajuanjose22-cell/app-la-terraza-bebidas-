@@ -9,7 +9,7 @@ export const users = sqliteTable("users", {
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   password: text("password").notNull(),
-  role: text("role", { enum: ["admin", "cajero"] }).notNull().default("cajero"),
+  role: text("role", { enum: ["admin", "cajero", "creator"] }).notNull().default("cajero"),
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
   updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
@@ -172,6 +172,16 @@ export const promotionItems = sqliteTable("promotion_items", {
   promotionId: integer("promotion_id").notNull().references(() => products.id, { onDelete: "cascade" }),
   productId: integer("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
   quantity: integer("quantity").notNull().default(1),
+});
+
+// ─────────────────────────────────────────
+// CONFIGURACIÓN DE SUSCRIPCIÓN (siempre 1 fila, id=1)
+// ─────────────────────────────────────────
+export const subscriptionConfig = sqliteTable("subscription_config", {
+  id: integer("id").primaryKey(),
+  subscriptionDay: integer("subscription_day"),
+  nextExpiry: text("next_expiry"),
+  updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
 });
 
 // ─────────────────────────────────────────

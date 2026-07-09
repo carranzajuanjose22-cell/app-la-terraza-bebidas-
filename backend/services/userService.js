@@ -1,13 +1,14 @@
 import bcrypt from "bcryptjs";
-import { eq } from "drizzle-orm";
+import { eq, ne } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { users } from "../models/schema.js";
 
 export async function getAllUsers() {
+  // El rol "creator" es interno y no debe aparecer en el panel de administración
   return db.select({
     id: users.id, name: users.name, email: users.email,
     role: users.role, isActive: users.isActive, createdAt: users.createdAt,
-  }).from(users);
+  }).from(users).where(ne(users.role, "creator"));
 }
 
 export async function getUserById(id) {
