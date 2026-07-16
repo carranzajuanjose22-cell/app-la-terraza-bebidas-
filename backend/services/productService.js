@@ -1,6 +1,6 @@
 import { eq, like, or } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { products, promotionItems, categories } from "../models/schema.js";
+import { products, promotionItems, categories, drinkBottleItems } from "../models/schema.js";
 
 // ── Helpers de recálculo de stock de promociones ──────────────────────────────
 
@@ -22,7 +22,6 @@ async function recalcPromotionStock(promotionId) {
     .where(eq(products.id, promotionId));
 }
 
-// Recalcula el stock de todas las promos que contengan este producto como componente
 export async function recalcPromotionsForProduct(productId) {
   const affectedPromos = await db
     .select()
@@ -35,36 +34,130 @@ export async function recalcPromotionsForProduct(productId) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+function normalizeDrinkBottleItems(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((i) => ({
+      bottleProductId: Number(i.bottleProductId),
+      glassesUsed: Math.max(1, Number(i.glassesUsed) || 1),
+      glassesPerBottle: Number(i.glassesPerBottle) || 0,
+    }))
+    .filter((i) => i.bottleProductId && i.glassesPerBottle > 0);
+}
+
+async function calcDrinkCostFromIngredients(ingredients) {
+  let total = 0;
+  for (const ing of ingredients) {
+    const [bottle] = await db.select().from(products).where(eq(products.id, ing.bottleProductId)).limit(1);
+    if (!bottle || ing.glassesPerBottle <= 0) continue;
+    total += (Number(bottle.cost) || 0) / ing.glassesPerBottle * ing.glassesUsed;
+  }
+  return total;
+}
+
+async function attachDrinkBottleItems(productList) {
+  if (!productList.length) return productList;
+  const allItems = await db.select().from(drinkBottleItems);
+  const byDrink = new Map();
+  for (const row of allItems) {
+    if (!byDrink.has(row.drinkProductId)) byDrink.set(row.drinkProductId, []);
+    byDrink.get(row.drinkProductId).push({
+      id: row.id,
+      bottleProductId: row.bottleProductId,
+      glassesUsed: row.glassesUsed,
+      glassesPerBottle: row.glassesPerBottle,
+    });
+  }
+
+  return productList.map((p) => {
+    const fromTable = byDrink.get(p.id);
+    if (fromTable?.length) return { ...p, drinkBottleItems: fromTable };
+    // Fallback legacy: un solo bottleProductId en products
+    if (p.bottleProductId && p.glassesPerBottle) {
+      return {
+        ...p,
+        drinkBottleItems: [{
+          bottleProductId: p.bottleProductId,
+          glassesUsed: 1,
+          glassesPerBottle: p.glassesPerBottle,
+        }],
+      };
+    }
+    return { ...p, drinkBottleItems: [] };
+  });
+}
+
+export async function getDrinkRecipe(productId) {
+  const items = await db.select().from(drinkBottleItems).where(eq(drinkBottleItems.drinkProductId, productId));
+  if (items.length > 0) {
+    return items.map((i) => ({
+      bottleProductId: i.bottleProductId,
+      glassesUsed: i.glassesUsed,
+      glassesPerBottle: i.glassesPerBottle,
+    }));
+  }
+  const [product] = await db.select().from(products).where(eq(products.id, productId)).limit(1);
+  if (product?.bottleProductId && product.glassesPerBottle) {
+    return [{
+      bottleProductId: product.bottleProductId,
+      glassesUsed: 1,
+      glassesPerBottle: product.glassesPerBottle,
+    }];
+  }
+  return [];
+}
+
 export async function getAllProducts(search = "") {
+  let list;
   if (search) {
-    return db.select().from(products).where(
+    list = await db.select().from(products).where(
       or(
         like(products.name, `%${search}%`),
         like(products.category, `%${search}%`)
       )
     );
+  } else {
+    list = await db.select().from(products);
   }
-  return db.select().from(products);
+  return attachDrinkBottleItems(list);
 }
 
 export async function getProductById(id) {
   const [product] = await db.select().from(products).where(eq(products.id, id)).limit(1);
   if (!product) throw new Error("Producto no encontrado");
+  const [enriched] = await attachDrinkBottleItems([product]);
   if (product.isPromotion) {
     const items = await db.select().from(promotionItems).where(eq(promotionItems.promotionId, id));
-    return { ...product, promotionItems: items };
+    return { ...enriched, promotionItems: items };
   }
-  return product;
+  return enriched;
 }
 
 export async function createProduct(data) {
-  const { promotionItems: items, ...productData } = data;
+  const { promotionItems: items, drinkBottleItems: rawDrinkItems, ...productData } = data;
+  const drinkItems = normalizeDrinkBottleItems(rawDrinkItems);
 
-  // Si es una promoción, asegurar que la categoría "Promocion" exista
   if (productData.isPromotion) {
     const existing = await db.select().from(categories).where(eq(categories.name, "Promocion")).limit(1);
     if (existing.length === 0) {
       await db.insert(categories).values({ name: "Promocion", sortOrder: 999 });
+    }
+  }
+
+  const isDrink = drinkItems.length > 0 || !!productData.bottleProductId;
+
+  if (isDrink) {
+    productData.stock = 0;
+    productData.minStock = 0;
+    if (drinkItems.length > 0) {
+      productData.cost = await calcDrinkCostFromIngredients(drinkItems);
+      // Mantener columns legacy con la primera botella (compat)
+      productData.bottleProductId = drinkItems[0].bottleProductId;
+      productData.glassesPerBottle = drinkItems[0].glassesPerBottle;
+    } else if (productData.bottleProductId) {
+      const [bottle] = await db.select().from(products).where(eq(products.id, productData.bottleProductId)).limit(1);
+      const gpb = Number(productData.glassesPerBottle) || 0;
+      productData.cost = bottle && gpb > 0 ? (Number(bottle.cost) || 0) / gpb : 0;
     }
   }
 
@@ -76,27 +169,74 @@ export async function createProduct(data) {
     );
   }
 
-  return product;
+  if (drinkItems.length > 0) {
+    await db.insert(drinkBottleItems).values(
+      drinkItems.map((i) => ({
+        drinkProductId: product.id,
+        bottleProductId: i.bottleProductId,
+        glassesUsed: i.glassesUsed,
+        glassesPerBottle: i.glassesPerBottle,
+      }))
+    );
+  } else if (productData.bottleProductId && productData.glassesPerBottle) {
+    await db.insert(drinkBottleItems).values({
+      drinkProductId: product.id,
+      bottleProductId: Number(productData.bottleProductId),
+      glassesUsed: 1,
+      glassesPerBottle: Number(productData.glassesPerBottle),
+    });
+  }
+
+  const [enriched] = await attachDrinkBottleItems([product]);
+  return enriched;
 }
 
 export async function updateProduct(id, data) {
-  // Separar promotionItems del resto de campos del producto
-  const { promotionItems: rawPromoItems, ...rest } = data;
+  const { promotionItems: rawPromoItems, drinkBottleItems: rawDrinkItems, ...rest } = data;
+  const drinkItems = rawDrinkItems !== undefined ? normalizeDrinkBottleItems(rawDrinkItems) : null;
 
-  // Solo pasar campos que existen en la tabla products
+  const bottleProductId = rest.bottleProductId ? Number(rest.bottleProductId) : null;
+  const glassesPerBottle = rest.glassesPerBottle != null && rest.glassesPerBottle !== ""
+    ? Number(rest.glassesPerBottle)
+    : null;
+
+  const isDrink =
+    (drinkItems && drinkItems.length > 0) ||
+    (!!bottleProductId && drinkItems === null);
+
+  let cost = Number(rest.cost ?? 0);
+  let legacyBottleId = null;
+  let legacyGpb = null;
+
+  if (drinkItems && drinkItems.length > 0) {
+    cost = await calcDrinkCostFromIngredients(drinkItems);
+    legacyBottleId = drinkItems[0].bottleProductId;
+    legacyGpb = drinkItems[0].glassesPerBottle;
+  } else if (drinkItems && drinkItems.length === 0) {
+    // Explicitamente dejó de ser trago
+    legacyBottleId = null;
+    legacyGpb = null;
+  } else if (bottleProductId) {
+    const [bottle] = await db.select().from(products).where(eq(products.id, bottleProductId)).limit(1);
+    const gpb = glassesPerBottle || 0;
+    cost = bottle && gpb > 0 ? (Number(bottle.cost) || 0) / gpb : 0;
+    legacyBottleId = bottleProductId;
+    legacyGpb = gpb;
+  }
+
   const productData = {
-    name:        rest.name,
-    price:       Number(rest.price),
-    cost:        Number(rest.cost ?? 0),
-    category:    rest.category,
-    stock:       Number(rest.stock ?? 0),
-    minStock:    Number(rest.minStock ?? 0),
-    icon:        rest.icon ?? "Package",
-    isPromotion: rest.isPromotion ? 1 : 0,
-    updatedAt:   new Date().toISOString(),
+    name:             rest.name,
+    price:            Number(rest.price),
+    cost,
+    category:         rest.category,
+    stock:            isDrink ? 0 : Number(rest.stock ?? 0),
+    minStock:         isDrink ? 0 : Number(rest.minStock ?? 0),
+    icon:             rest.icon ?? "Package",
+    isPromotion:      rest.isPromotion ? 1 : 0,
+    bottleProductId:  legacyBottleId,
+    glassesPerBottle: legacyGpb,
+    updatedAt:        new Date().toISOString(),
   };
-
-  console.log(`[updateProduct] id=${id} isPromotion=${productData.isPromotion} promoItems recibidos:`, rawPromoItems);
 
   const [updated] = await db
     .update(products)
@@ -105,31 +245,43 @@ export async function updateProduct(id, data) {
     .returning();
   if (!updated) throw new Error("Producto no encontrado");
 
-  // Actualizar items de la promoción si vienen en el payload
   if (Array.isArray(rawPromoItems)) {
-    console.log(`[updateProduct] Actualizando ${rawPromoItems.length} items de la promo ${id}`);
     await db.delete(promotionItems).where(eq(promotionItems.promotionId, id));
     if (rawPromoItems.length > 0) {
-      const values = rawPromoItems.map((i) => ({
-        promotionId: id,
-        productId:   Number(i.productId),
-        quantity:    Number(i.quantity) || 1,
-      }));
-      console.log(`[updateProduct] Insertando items:`, values);
-      await db.insert(promotionItems).values(values);
+      await db.insert(promotionItems).values(
+        rawPromoItems.map((i) => ({
+          promotionId: id,
+          productId: Number(i.productId),
+          quantity: Number(i.quantity) || 1,
+        }))
+      );
     }
-    console.log(`[updateProduct] Items actualizados OK`);
   }
 
-  // Si se actualizó un componente (no una promo), recalcular el stock de las promos que lo usen
+  if (drinkItems !== null) {
+    await db.delete(drinkBottleItems).where(eq(drinkBottleItems.drinkProductId, id));
+    if (drinkItems.length > 0) {
+      await db.insert(drinkBottleItems).values(
+        drinkItems.map((i) => ({
+          drinkProductId: id,
+          bottleProductId: i.bottleProductId,
+          glassesUsed: i.glassesUsed,
+          glassesPerBottle: i.glassesPerBottle,
+        }))
+      );
+    }
+  }
+
   if (!productData.isPromotion) {
     await recalcPromotionsForProduct(id);
   }
 
-  return updated;
+  const [enriched] = await attachDrinkBottleItems([updated]);
+  return enriched;
 }
 
 export async function deleteProduct(id) {
+  await db.delete(drinkBottleItems).where(eq(drinkBottleItems.drinkProductId, id));
   const [deleted] = await db.delete(products).where(eq(products.id, id)).returning();
   if (!deleted) throw new Error("Producto no encontrado");
   return { message: "Producto eliminado" };

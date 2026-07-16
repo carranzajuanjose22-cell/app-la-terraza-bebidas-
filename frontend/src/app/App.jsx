@@ -95,25 +95,22 @@ export default function App() {
   }
 
   async function handleAddTransaction(transaction) {
-    try {
-      const payload = {
-        total: transaction.total,
-        payments: transaction.payments,
-        items: transaction.items,
-      };
-      const { data } = await api.post("/transactions", payload);
-      const normalized = {
-        id: String(data.id),
-        date: data.date,
-        time: data.time,
-        total: data.total,
-        payments: data.payments.map((p) => ({ type: p.methodName, amount: p.amount })),
-        items: data.items.map((i) => ({ name: i.productName, quantity: i.quantity, total: i.total })),
-      };
-      setTransactions((prev) => [normalized, ...prev]);
-    } catch {
-      setTransactions((prev) => [transaction, ...prev]);
-    }
+    const payload = {
+      total: transaction.total,
+      payments: transaction.payments,
+      items: transaction.items,
+    };
+    const { data } = await api.post("/transactions", payload);
+    const normalized = {
+      id: String(data.id),
+      date: data.date,
+      time: data.time,
+      total: data.total,
+      payments: data.payments.map((p) => ({ type: p.methodName, amount: p.amount })),
+      items: data.items.map((i) => ({ name: i.productName, quantity: i.quantity, total: i.total })),
+    };
+    setTransactions((prev) => [normalized, ...prev]);
+    return normalized;
   }
 
   function handleLogin(loggedUser) {

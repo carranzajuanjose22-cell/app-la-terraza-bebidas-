@@ -20,10 +20,35 @@ export async function getProduct(req, res) {
 
 export async function createProduct(req, res) {
   try {
-    const { name, price, cost, category, stock, minStock, icon, isPromotion, promotionItems } = req.body;
+    const {
+      name, price, cost, category, stock, minStock, icon,
+      isPromotion, promotionItems, bottleProductId, glassesPerBottle, drinkBottleItems,
+    } = req.body;
     if (!name || price === undefined) {
       return res.status(400).json({ message: "Nombre y precio son requeridos" });
     }
+
+    const ingredients = Array.isArray(drinkBottleItems) ? drinkBottleItems : [];
+    const isDrinkGlass = ingredients.length > 0 || !!bottleProductId;
+
+    if (isDrinkGlass) {
+      if (isPromotion) {
+        return res.status(400).json({ message: "Un producto no puede ser al mismo tiempo promoción y vaso de trago" });
+      }
+      if (ingredients.length > 0) {
+        for (const ing of ingredients) {
+          if (!ing.bottleProductId || !ing.glassesPerBottle || Number(ing.glassesPerBottle) <= 0) {
+            return res.status(400).json({ message: "Cada botella del trago necesita rendimiento (vasos por botella) válido" });
+          }
+          if (!ing.glassesUsed || Number(ing.glassesUsed) <= 0) {
+            return res.status(400).json({ message: "Indicá cuánto usa el trago de cada botella (mayor a 0)" });
+          }
+        }
+      } else if (!glassesPerBottle || Number(glassesPerBottle) <= 0) {
+        return res.status(400).json({ message: "Un vaso de trago requiere indicar cuántos vasos rinde la botella" });
+      }
+    }
+
     const product = await productService.createProduct({
       name,
       price: Number(price),
@@ -34,6 +59,9 @@ export async function createProduct(req, res) {
       icon: isPromotion ? "Layers" : (icon || "Package"),
       isPromotion: !!isPromotion,
       promotionItems: Array.isArray(promotionItems) ? promotionItems : [],
+      bottleProductId: bottleProductId ? Number(bottleProductId) : null,
+      glassesPerBottle: glassesPerBottle ? Number(glassesPerBottle) : null,
+      drinkBottleItems: ingredients,
     });
     res.status(201).json(product);
   } catch (error) {
@@ -43,6 +71,28 @@ export async function createProduct(req, res) {
 
 export async function updateProduct(req, res) {
   try {
+    const { bottleProductId, glassesPerBottle, isPromotion, drinkBottleItems } = req.body;
+    const ingredients = Array.isArray(drinkBottleItems) ? drinkBottleItems : null;
+    const isDrinkGlass = (ingredients && ingredients.length > 0) || !!bottleProductId;
+
+    if (isDrinkGlass) {
+      if (isPromotion) {
+        return res.status(400).json({ message: "Un producto no puede ser al mismo tiempo promoción y vaso de trago" });
+      }
+      if (ingredients && ingredients.length > 0) {
+        for (const ing of ingredients) {
+          if (!ing.bottleProductId || !ing.glassesPerBottle || Number(ing.glassesPerBottle) <= 0) {
+            return res.status(400).json({ message: "Cada botella del trago necesita rendimiento (vasos por botella) válido" });
+          }
+          if (!ing.glassesUsed || Number(ing.glassesUsed) <= 0) {
+            return res.status(400).json({ message: "Indicá cuánto usa el trago de cada botella (mayor a 0)" });
+          }
+        }
+      } else if (bottleProductId && (!glassesPerBottle || Number(glassesPerBottle) <= 0)) {
+        return res.status(400).json({ message: "Un vaso de trago requiere indicar cuántos vasos rinde la botella" });
+      }
+    }
+
     const product = await productService.updateProduct(Number(req.params.id), req.body);
     res.json(product);
   } catch (error) {

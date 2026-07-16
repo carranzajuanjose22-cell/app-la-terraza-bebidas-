@@ -40,6 +40,11 @@ export const products = sqliteTable("products", {
   icon: text("icon").notNull().default("Package"),
   isAvailable: integer("is_available", { mode: "boolean" }).notNull().default(true),
   isPromotion: integer("is_promotion", { mode: "boolean" }).notNull().default(false),
+  // Si estan seteados, el producto es un "vaso de trago" servido desde una botella abierta
+  // en la barra. El vaso no consume stock propio ni de la botella al venderse, solo
+  // incrementa servedGlasses de la bar_bottle correspondiente.
+  bottleProductId: integer("bottle_product_id").references(() => products.id, { onDelete: "set null" }),
+  glassesPerBottle: integer("glasses_per_bottle"),
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
   updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
 });
@@ -148,6 +153,9 @@ export const barBottles = sqliteTable("bar_bottles", {
   productId: integer("product_id").notNull().references(() => products.id),
   productName: text("product_name").notNull(),
   status: text("status", { enum: ["open", "empty"] }).notNull().default("open"),
+  // Cantidad de vasos servidos desde esta botella. Se auto-marca como "empty"
+  // cuando llega al glassesPerBottle del vaso de trago asociado.
+  servedGlasses: integer("served_glasses").notNull().default(0),
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
 });
 
@@ -172,6 +180,19 @@ export const promotionItems = sqliteTable("promotion_items", {
   promotionId: integer("promotion_id").notNull().references(() => products.id, { onDelete: "cascade" }),
   productId: integer("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
   quantity: integer("quantity").notNull().default(1),
+});
+
+// ─────────────────────────────────────────
+// ÍTEMS DE TRAGO (botellas que componen un vaso/trago)
+// Un trago puede usar 1+ botellas; glassesUsed = cuánto consume de cada una
+// por unidad vendida; glassesPerBottle = rendimiento de esa botella hasta vaciarse.
+// ─────────────────────────────────────────
+export const drinkBottleItems = sqliteTable("drink_bottle_items", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  drinkProductId: integer("drink_product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
+  bottleProductId: integer("bottle_product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
+  glassesUsed: integer("glasses_used").notNull().default(1),
+  glassesPerBottle: integer("glasses_per_bottle").notNull(),
 });
 
 // ─────────────────────────────────────────

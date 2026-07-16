@@ -1,6 +1,6 @@
 import { db } from "../db/index.js";
-import { barBottles, products } from "../models/schema.js";
-import { eq, desc } from "drizzle-orm";
+import { barBottles, products, drinkBottleItems } from "../models/schema.js";
+import { eq, desc, isNotNull } from "drizzle-orm";
 
 export const getBarBottles = async (req, res) => {
   try {
@@ -9,7 +9,60 @@ export const getBarBottles = async (req, res) => {
       .from(barBottles)
       .where(eq(barBottles.status, "open"))
       .orderBy(desc(barBottles.createdAt));
-    res.json(bottles);
+
+    // Rendimiento por tipo de botella: preferir drink_bottle_items, luego legacy products
+    const drinkItems = await db.select().from(drinkBottleItems);
+    const glassesByBottleProductId = new Map();
+    for (const dg of drinkItems) {
+      if (!glassesByBottleProductId.has(dg.bottleProductId)) {
+        glassesByBottleProductId.set(dg.bottleProductId, {
+          glassesPerBottle: dg.glassesPerBottle,
+          drinkName: null,
+        });
+      }
+    }
+
+    const legacyDrinks = await db
+      .select({
+        bottleProductId: products.bottleProductId,
+        glassesPerBottle: products.glassesPerBottle,
+        drinkName: products.name,
+      })
+      .from(products)
+      .where(isNotNull(products.bottleProductId));
+
+    for (const dg of legacyDrinks) {
+      if (!glassesByBottleProductId.has(dg.bottleProductId)) {
+        glassesByBottleProductId.set(dg.bottleProductId, {
+          glassesPerBottle: dg.glassesPerBottle,
+          drinkName: dg.drinkName,
+        });
+      } else if (!glassesByBottleProductId.get(dg.bottleProductId).drinkName) {
+        glassesByBottleProductId.get(dg.bottleProductId).drinkName = dg.drinkName;
+      }
+    }
+
+    // Nombres de tragos que usan cada botella
+    const drinkNamesByBottle = new Map();
+    for (const dg of drinkItems) {
+      const [drink] = await db.select({ name: products.name }).from(products).where(eq(products.id, dg.drinkProductId)).limit(1);
+      if (!drink) continue;
+      if (!drinkNamesByBottle.has(dg.bottleProductId)) drinkNamesByBottle.set(dg.bottleProductId, []);
+      drinkNamesByBottle.get(dg.bottleProductId).push(drink.name);
+    }
+
+    const enriched = bottles.map((b) => {
+      const info = glassesByBottleProductId.get(b.productId);
+      const names = drinkNamesByBottle.get(b.productId) || [];
+      return {
+        ...b,
+        glassesPerBottle: info?.glassesPerBottle ?? null,
+        drinkGlassName: names[0] || info?.drinkName || null,
+        drinkGlassNames: names,
+      };
+    });
+
+    res.json(enriched);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

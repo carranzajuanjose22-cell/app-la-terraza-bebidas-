@@ -12,7 +12,17 @@ const ICON_OPTIONS = [
   { key: "Package", Icon: Package, label: "Genérico"       },
 ];
 
-const EMPTY_PRODUCT = { name: "", price: "", cost: "", category: "Vinos", stock: "", minStock: "", icon: "Package" };
+const EMPTY_PRODUCT = {
+  name: "",
+  price: "",
+  cost: "",
+  category: "Vinos",
+  stock: "",
+  minStock: "",
+  icon: "Package",
+  isDrinkGlass: false,
+  drinkBottleItems: [],
+};
 
 const EMPTY_PROMO = { name: "", cost: "", price: "", stock: "", minStock: "", items: [] };
 
@@ -52,10 +62,47 @@ export function InventarioView() {
     const matchesCategory = selectedCategory === "Todos" || p.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
-  const lowStockItems = inventory.filter((p) => p.stock <= p.minStock);
+  // Los vasos de trago no tienen stock propio; no entran en alerta de stock bajo.
+  const isDrinkProduct = (p) =>
+    !!p.bottleProductId || (Array.isArray(p.drinkBottleItems) && p.drinkBottleItems.length > 0);
+
+  const lowStockItems = inventory.filter((p) => !isDrinkProduct(p) && p.stock <= p.minStock);
+
+  // Botellas fuente: productos normales (no promo, no vaso/trago).
+  const bottleSourceProducts = inventory.filter((p) => !p.isPromotion && !isDrinkProduct(p));
 
   const handleAddProduct = () => {
-    setProductModal({ isOpen: true, item: { ...EMPTY_PRODUCT, category: categories[0] || "General" }, isNew: true });
+    setProductModal({ isOpen: true, item: { ...EMPTY_PRODUCT, drinkBottleItems: [], category: categories[0] || "General" }, isNew: true });
+  };
+
+  const openEditProductModal = (product) => {
+    const drinkItems = (product.drinkBottleItems || []).map((i) => ({
+      bottleProductId: String(i.bottleProductId),
+      glassesUsed: String(i.glassesUsed ?? 1),
+      glassesPerBottle: String(i.glassesPerBottle ?? ""),
+    }));
+    const legacyDrink = !drinkItems.length && product.bottleProductId
+      ? [{
+          bottleProductId: String(product.bottleProductId),
+          glassesUsed: "1",
+          glassesPerBottle: String(product.glassesPerBottle ?? ""),
+        }]
+      : drinkItems;
+
+    setProductModal({
+      isOpen: true,
+      isNew: false,
+      item: {
+        ...product,
+        price: String(product.price),
+        cost: String(product.cost ?? ""),
+        stock: String(product.stock),
+        minStock: String(product.minStock),
+        icon: product.icon || "Package",
+        isDrinkGlass: legacyDrink.length > 0,
+        drinkBottleItems: legacyDrink,
+      },
+    });
   };
 
   const handleDeleteProduct = async () => {
@@ -75,15 +122,54 @@ export function InventarioView() {
 
   const handleSaveProduct = async () => {
     if (!productModal.item?.name) { toast.error("El nombre del producto es obligatorio"); return; }
+    const isDrinkGlass = !!productModal.item.isDrinkGlass;
+    const drinkBottleItems = isDrinkGlass
+      ? (productModal.item.drinkBottleItems || []).map((i) => ({
+          bottleProductId: Number(i.bottleProductId),
+          glassesUsed: Number(i.glassesUsed) || 1,
+          glassesPerBottle: Number(i.glassesPerBottle) || 0,
+        }))
+      : [];
+
+    if (isDrinkGlass) {
+      if (drinkBottleItems.length === 0) {
+        toast.error("Agregá al menos una botella al trago");
+        return;
+      }
+      for (const ing of drinkBottleItems) {
+        if (!ing.bottleProductId) {
+          toast.error("Seleccioná todas las botellas del trago");
+          return;
+        }
+        if (ing.glassesUsed <= 0) {
+          toast.error("Cada botella debe indicar cuánto usa el trago (mayor a 0)");
+          return;
+        }
+        if (ing.glassesPerBottle <= 0) {
+          toast.error("Cada botella necesita el rendimiento (cuántas porciones salen de una botella)");
+          return;
+        }
+      }
+      const ids = drinkBottleItems.map((i) => i.bottleProductId);
+      if (new Set(ids).size !== ids.length) {
+        toast.error("No repetir la misma botella en el trago");
+        return;
+      }
+    }
     if (submitting) return;
     setSubmitting(true);
     try {
       const payload = {
-        ...productModal.item,
+        name: productModal.item.name,
         price: parseFloat(productModal.item.price) || 0,
         cost: parseFloat(productModal.item.cost) || 0,
-        stock: parseInt(productModal.item.stock, 10) || 0,
-        minStock: parseInt(productModal.item.minStock, 10) || 0,
+        category: productModal.item.category,
+        icon: productModal.item.icon || "Package",
+        stock: isDrinkGlass ? 0 : (parseInt(productModal.item.stock, 10) || 0),
+        minStock: isDrinkGlass ? 0 : (parseInt(productModal.item.minStock, 10) || 0),
+        drinkBottleItems: isDrinkGlass ? drinkBottleItems : [],
+        bottleProductId: null,
+        glassesPerBottle: null,
       };
 
       const originalProduct = inventory.find(p => p.id === productModal.item.id);
@@ -95,7 +181,7 @@ export function InventarioView() {
       } else {
         await api.put(`/products/${productModal.item.id}`, payload);
         toast.success("Producto actualizado exitosamente");
-        if (oldStock !== payload.stock) {
+        if (!isDrinkGlass && oldStock !== payload.stock) {
           await api.post("/stats/stock-modifications", {
             productId: productModal.item.id,
             productName: productModal.item.name,
@@ -334,24 +420,54 @@ export function InventarioView() {
             </thead>
             <tbody>
               {filteredInventory.map((product) => {
-                const lowStock = product.stock <= product.minStock;
+                const drinkItems = product.drinkBottleItems?.length
+                  ? product.drinkBottleItems
+                  : (product.bottleProductId
+                    ? [{ bottleProductId: product.bottleProductId, glassesUsed: 1, glassesPerBottle: product.glassesPerBottle }]
+                    : []);
+                const isDrinkGlass = drinkItems.length > 0;
+                const lowStock = !isDrinkGlass && product.stock <= product.minStock;
+                const bottleSummary = drinkItems.map((ing) => {
+                  const bottleName = inventory.find((p) => p.id === ing.bottleProductId)?.name || `#${ing.bottleProductId}`;
+                  return `${bottleName}×${ing.glassesUsed}`;
+                }).join(" + ");
                 return (
                   <tr key={product.id} className="border-b border-[#2a2a2a] hover:bg-[#2a2a2a] transition-colors">
                     <td className="p-4">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         {product.isPromotion && <Tag size={14} className="text-blue-400 shrink-0" />}
+                        {isDrinkGlass && <Wine size={14} className="text-purple-400 shrink-0" />}
                         <span className="text-white">{product.name}</span>
+                        {isDrinkGlass && (
+                          <span className="bg-purple-500/15 text-purple-300 px-2 py-0.5 rounded text-xs border border-purple-500/20" title={bottleSummary}>
+                            Trago · {drinkItems.length} botella{drinkItems.length === 1 ? "" : "s"}
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="p-4"><span className="text-gray-400">{product.category}</span></td>
                     <td className="p-4"><span className="text-gray-400">${Number(product.cost || 0).toFixed(2)}</span></td>
                     <td className="p-4"><span className="text-white">${Number(product.price).toFixed(2)}</span></td>
-                    <td className="p-4"><span className="text-white">{product.stock} unidades</span></td>
-                    <td className="p-4"><span className="text-gray-400">{product.minStock} unid.</span></td>
                     <td className="p-4">
-                      <span className={`px-3 py-1 rounded-full text-sm ${lowStock ? "bg-orange-500/20 text-orange-400" : "bg-green-500/20 text-green-400"}`}>
-                        {lowStock ? "Stock Bajo" : "Stock OK"}
+                      <span className="text-white">
+                        {isDrinkGlass ? "Desde barra" : `${product.stock} unidades`}
                       </span>
+                    </td>
+                    <td className="p-4">
+                      <span className="text-gray-400">
+                        {isDrinkGlass ? "—" : `${product.minStock} unid.`}
+                      </span>
+                    </td>
+                    <td className="p-4">
+                      {isDrinkGlass ? (
+                        <span className="px-3 py-1 rounded-full text-sm bg-purple-500/20 text-purple-300">
+                          Vaso de trago
+                        </span>
+                      ) : (
+                        <span className={`px-3 py-1 rounded-full text-sm ${lowStock ? "bg-orange-500/20 text-orange-400" : "bg-green-500/20 text-green-400"}`}>
+                          {lowStock ? "Stock Bajo" : "Stock OK"}
+                        </span>
+                      )}
                     </td>
                     <td className="p-4 text-center">
                       <div className="flex items-center justify-center gap-3">
@@ -366,7 +482,7 @@ export function InventarioView() {
                           </button>
                         ) : (
                           <button
-                            onClick={() => setProductModal({ isOpen: true, item: { ...product, price: String(product.price), cost: String(product.cost ?? ""), stock: String(product.stock), minStock: String(product.minStock), icon: product.icon || "Package" }, isNew: false })}
+                            onClick={() => openEditProductModal(product)}
                             className="text-gray-400 hover:text-white transition-colors p-1"
                             title="Editar producto"
                           >
@@ -405,7 +521,7 @@ export function InventarioView() {
             </div>
             <div className="p-6 space-y-4 overflow-y-auto">
               {[
-                { label: "Nombre del producto", field: "name", type: "text", placeholder: "Ej. Vino Tinto" },
+                { label: "Nombre del producto", field: "name", type: "text", placeholder: "Ej. Vaso de Fernet" },
               ].map(({ label, field, type, placeholder }) => (
                 <div key={field}>
                   <label className="text-gray-400 text-sm block mb-2">{label}</label>
@@ -443,44 +559,234 @@ export function InventarioView() {
                   {allCategories.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-              {[{ label: "Costo ($)", field: "cost" }, { label: "Precio ($)", field: "price" }].map(({ label, field }) => (
-                <div key={field}>
-                  <label className="text-gray-400 text-sm block mb-2">{label}</label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={productModal.item[field]}
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/[^0-9.]/g, "").replace(/^0+(?=\d)/, "");
-                      setProductModal((prev) => ({ ...prev, item: { ...prev.item, [field]: val } }));
-                    }}
-                    onFocus={(e) => e.target.select()}
-                    placeholder="0"
-                    className="w-full bg-[#2a2a2a] text-white rounded-xl px-4 py-3 border border-[#333] focus:border-[#6B21A8] outline-none"
-                  />
+
+              <label className="flex items-center gap-3 p-3 rounded-xl bg-[#2a2a2a] border border-[#333] cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={!!productModal.item.isDrinkGlass}
+                  onChange={(e) => setProductModal((prev) => ({
+                    ...prev,
+                    item: {
+                      ...prev.item,
+                      isDrinkGlass: e.target.checked,
+                      drinkBottleItems: e.target.checked
+                        ? (prev.item.drinkBottleItems?.length
+                          ? prev.item.drinkBottleItems
+                          : [{ bottleProductId: "", glassesUsed: "1", glassesPerBottle: "" }])
+                        : [],
+                      stock: e.target.checked ? "0" : prev.item.stock,
+                      minStock: e.target.checked ? "0" : prev.item.minStock,
+                    },
+                  }))}
+                  className="w-4 h-4 accent-[#6B21A8]"
+                />
+                <div>
+                  <p className="text-white text-sm font-medium">Es vaso / trago de barra</p>
+                  <p className="text-gray-500 text-xs">Se prepara con una o más botellas abiertas en la barra</p>
                 </div>
-              ))}
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-              {[{ label: "Stock Actual", field: "stock" }, { label: "Stock Mínimo", field: "minStock" }].map(({ label, field }) => (
-                <div key={field}>
-                  <label className="text-gray-400 text-sm block mb-2">{label}</label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={productModal.item[field]}
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/[^0-9]/g, "").replace(/^0+(?=\d)/, "");
-                      setProductModal((prev) => ({ ...prev, item: { ...prev.item, [field]: val } }));
-                    }}
-                    onFocus={(e) => e.target.select()}
-                    placeholder="0"
-                    className="w-full bg-[#2a2a2a] text-white rounded-xl px-4 py-3 border border-[#333] focus:border-[#6B21A8] outline-none"
-                  />
-                </div>
-              ))}
-              </div>
+              </label>
+
+              {productModal.item.isDrinkGlass ? (
+                <>
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-gray-400 text-sm">Botellas del trago</label>
+                      <button
+                        type="button"
+                        onClick={() => setProductModal((prev) => ({
+                          ...prev,
+                          item: {
+                            ...prev.item,
+                            drinkBottleItems: [
+                              ...(prev.item.drinkBottleItems || []),
+                              { bottleProductId: "", glassesUsed: "1", glassesPerBottle: "" },
+                            ],
+                          },
+                        }))}
+                        className="text-xs bg-[#6B21A8] hover:bg-[#581C87] text-white px-2.5 py-1 rounded-lg flex items-center gap-1"
+                      >
+                        <Plus size={12} /> Agregar botella
+                      </button>
+                    </div>
+                    <div className="space-y-3">
+                      {(productModal.item.drinkBottleItems || []).map((ing, idx) => (
+                        <div key={idx} className="bg-[#2a2a2a] rounded-xl p-3 border border-[#333] space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-gray-400 text-xs">Botella {idx + 1}</span>
+                            {(productModal.item.drinkBottleItems || []).length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => setProductModal((prev) => ({
+                                  ...prev,
+                                  item: {
+                                    ...prev.item,
+                                    drinkBottleItems: prev.item.drinkBottleItems.filter((_, i) => i !== idx),
+                                  },
+                                }))}
+                                className="text-gray-500 hover:text-red-400 p-1"
+                                title="Quitar botella"
+                              >
+                                <X size={14} />
+                              </button>
+                            )}
+                          </div>
+                          <select
+                            value={ing.bottleProductId || ""}
+                            onChange={(e) => setProductModal((prev) => ({
+                              ...prev,
+                              item: {
+                                ...prev.item,
+                                drinkBottleItems: prev.item.drinkBottleItems.map((row, i) =>
+                                  i === idx ? { ...row, bottleProductId: e.target.value } : row
+                                ),
+                              },
+                            }))}
+                            className="w-full bg-[#1a1a1a] text-white rounded-lg px-3 py-2.5 border border-[#444] focus:border-[#6B21A8] outline-none text-sm"
+                          >
+                            <option value="">Seleccioná la botella...</option>
+                            {bottleSourceProducts
+                              .filter((p) => p.id !== productModal.item.id)
+                              .map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.name} (Stock: {p.stock})
+                                </option>
+                              ))}
+                          </select>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-gray-500 text-xs block mb-1">Usa por trago</label>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                value={ing.glassesUsed}
+                                onChange={(e) => {
+                                  const val = e.target.value.replace(/[^0-9]/g, "").replace(/^0+(?=\d)/, "") || "";
+                                  setProductModal((prev) => ({
+                                    ...prev,
+                                    item: {
+                                      ...prev.item,
+                                      drinkBottleItems: prev.item.drinkBottleItems.map((row, i) =>
+                                        i === idx ? { ...row, glassesUsed: val } : row
+                                      ),
+                                    },
+                                  }));
+                                }}
+                                onFocus={(e) => e.target.select()}
+                                placeholder="1"
+                                className="w-full bg-[#1a1a1a] text-white rounded-lg px-3 py-2 border border-[#444] focus:border-[#6B21A8] outline-none text-sm"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-gray-500 text-xs block mb-1">Rendimiento botella</label>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                value={ing.glassesPerBottle}
+                                onChange={(e) => {
+                                  const val = e.target.value.replace(/[^0-9]/g, "").replace(/^0+(?=\d)/, "") || "";
+                                  setProductModal((prev) => ({
+                                    ...prev,
+                                    item: {
+                                      ...prev.item,
+                                      drinkBottleItems: prev.item.drinkBottleItems.map((row, i) =>
+                                        i === idx ? { ...row, glassesPerBottle: val } : row
+                                      ),
+                                    },
+                                  }));
+                                }}
+                                onFocus={(e) => e.target.select()}
+                                placeholder="Ej. 20"
+                                className="w-full bg-[#1a1a1a] text-white rounded-lg px-3 py-2 border border-[#444] focus:border-[#6B21A8] outline-none text-sm"
+                              />
+                            </div>
+                          </div>
+                          <p className="text-gray-600 text-[11px]">
+                            Por cada trago vendido se descuentan {ing.glassesUsed || "?"} porción(es) de esta botella. Al llegar a {ing.glassesPerBottle || "?"} se vacía.
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-gray-400 text-sm block mb-2">Costo estimado ($)</label>
+                      <div className="w-full bg-[#1f1f1f] text-gray-300 rounded-xl px-4 py-3 border border-[#2a2a2a] cursor-not-allowed">
+                        {(() => {
+                          const items = productModal.item.drinkBottleItems || [];
+                          let total = 0;
+                          let ok = false;
+                          for (const ing of items) {
+                            const bottle = bottleSourceProducts.find((p) => String(p.id) === String(ing.bottleProductId));
+                            const gpb = Number(ing.glassesPerBottle) || 0;
+                            const used = Number(ing.glassesUsed) || 0;
+                            if (!bottle || gpb <= 0 || used <= 0) continue;
+                            total += (Number(bottle.cost) || 0) / gpb * used;
+                            ok = true;
+                          }
+                          return ok ? `$${total.toFixed(2)}` : "—";
+                        })()}
+                      </div>
+                      <p className="text-gray-500 text-xs mt-1">Suma del costo proporcional de cada botella</p>
+                    </div>
+                    <div>
+                      <label className="text-gray-400 text-sm block mb-2">Precio ($)</label>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={productModal.item.price}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/[^0-9.]/g, "").replace(/^0+(?=\d)/, "");
+                          setProductModal((prev) => ({ ...prev, item: { ...prev.item, price: val } }));
+                        }}
+                        onFocus={(e) => e.target.select()}
+                        placeholder="0"
+                        className="w-full bg-[#2a2a2a] text-white rounded-xl px-4 py-3 border border-[#333] focus:border-[#6B21A8] outline-none"
+                      />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                  {[{ label: "Costo ($)", field: "cost" }, { label: "Precio ($)", field: "price" }].map(({ label, field }) => (
+                    <div key={field}>
+                      <label className="text-gray-400 text-sm block mb-2">{label}</label>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={productModal.item[field]}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/[^0-9.]/g, "").replace(/^0+(?=\d)/, "");
+                          setProductModal((prev) => ({ ...prev, item: { ...prev.item, [field]: val } }));
+                        }}
+                        onFocus={(e) => e.target.select()}
+                        placeholder="0"
+                        className="w-full bg-[#2a2a2a] text-white rounded-xl px-4 py-3 border border-[#333] focus:border-[#6B21A8] outline-none"
+                      />
+                    </div>
+                  ))}
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                  {[{ label: "Stock Actual", field: "stock" }, { label: "Stock Mínimo", field: "minStock" }].map(({ label, field }) => (
+                    <div key={field}>
+                      <label className="text-gray-400 text-sm block mb-2">{label}</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={productModal.item[field]}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/[^0-9]/g, "").replace(/^0+(?=\d)/, "");
+                          setProductModal((prev) => ({ ...prev, item: { ...prev.item, [field]: val } }));
+                        }}
+                        onFocus={(e) => e.target.select()}
+                        placeholder="0"
+                        className="w-full bg-[#2a2a2a] text-white rounded-xl px-4 py-3 border border-[#333] focus:border-[#6B21A8] outline-none"
+                      />
+                    </div>
+                  ))}
+                  </div>
+                </>
+              )}
             </div>
             <div className="p-6 border-t border-[#2a2a2a] flex gap-4 shrink-0">
               <button onClick={() => setProductModal({ isOpen: false, item: null, isNew: false })} className="flex-1 bg-[#2a2a2a] hover:bg-[#333] text-white py-4 rounded-xl transition-all">Cancelar</button>

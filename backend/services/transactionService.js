@@ -1,7 +1,76 @@
-import { eq, desc, sql } from "drizzle-orm";
+import { and, asc, eq, desc, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { transactions, transactionItems, transactionPayments, products, promotionItems } from "../models/schema.js";
-import { recalcPromotionsForProduct } from "./productService.js";
+import { transactions, transactionItems, transactionPayments, products, promotionItems, barBottles } from "../models/schema.js";
+import { recalcPromotionsForProduct, getDrinkRecipe } from "./productService.js";
+
+async function getAvailableGlassesForBottle(bottleProductId, glassesPerBottle) {
+  const openBottles = await db
+    .select()
+    .from(barBottles)
+    .where(and(eq(barBottles.productId, bottleProductId), eq(barBottles.status, "open")));
+  return openBottles.reduce(
+    (acc, b) => acc + Math.max(0, glassesPerBottle - (b.servedGlasses || 0)),
+    0,
+  );
+}
+
+async function consumeGlassesFromBottles(bottleProductId, glassesPerBottle, quantity, drinkName) {
+  const openBottles = await db
+    .select()
+    .from(barBottles)
+    .where(and(eq(barBottles.productId, bottleProductId), eq(barBottles.status, "open")))
+    .orderBy(asc(barBottles.createdAt));
+
+  let remaining = quantity;
+  for (const bottle of openBottles) {
+    if (remaining <= 0) break;
+    const room = Math.max(0, glassesPerBottle - (bottle.servedGlasses || 0));
+    if (room <= 0) continue;
+    const take = Math.min(room, remaining);
+    const newServed = (bottle.servedGlasses || 0) + take;
+    const isEmpty = newServed >= glassesPerBottle;
+    await db
+      .update(barBottles)
+      .set({ servedGlasses: newServed, status: isEmpty ? "empty" : "open" })
+      .where(eq(barBottles.id, bottle.id));
+    remaining -= take;
+  }
+
+  if (remaining > 0) {
+    throw new Error(`No hay botellas abiertas suficientes para "${drinkName}"`);
+  }
+}
+
+async function validateDrinkCapacity(product, quantity) {
+  const recipe = await getDrinkRecipe(product.id);
+  if (recipe.length === 0) return false;
+
+  for (const ing of recipe) {
+    const needed = ing.glassesUsed * quantity;
+    const available = await getAvailableGlassesForBottle(ing.bottleProductId, ing.glassesPerBottle);
+    if (available < needed) {
+      const [bottle] = await db.select().from(products).where(eq(products.id, ing.bottleProductId)).limit(1);
+      const bottleName = bottle?.name || "botella";
+      throw new Error(
+        `Sin botellas abiertas suficientes de "${bottleName}" para "${product.name}": ` +
+        `hay ${available} porción${available === 1 ? "" : "es"}, se necesitan ${needed}. Abrí otra botella en la barra.`,
+      );
+    }
+  }
+  return true;
+}
+
+async function consumeDrinkRecipe(product, quantity) {
+  const recipe = await getDrinkRecipe(product.id);
+  for (const ing of recipe) {
+    await consumeGlassesFromBottles(
+      ing.bottleProductId,
+      ing.glassesPerBottle,
+      ing.glassesUsed * quantity,
+      product.name,
+    );
+  }
+}
 
 export async function getTransactionsByRegister(cashRegisterId) {
   const txs = await db
@@ -26,15 +95,16 @@ export async function getTransactionsByRegister(cashRegisterId) {
 }
 
 export async function createTransaction(data, userId, cashRegisterId) {
-  // Validar stock disponible antes de procesar
   if (data.items && data.items.length > 0) {
     for (const item of data.items) {
       if (!item.productId) continue;
       const [product] = await db.select().from(products).where(eq(products.id, item.productId)).limit(1);
       if (!product) throw new Error(`Producto no encontrado: ${item.name}`);
 
+      const isDrink = await validateDrinkCapacity(product, item.quantity);
+      if (isDrink) continue;
+
       if (product.isPromotion) {
-        // Validar stock de cada componente de la promoción
         const components = await db.select().from(promotionItems).where(eq(promotionItems.promotionId, product.id));
         for (const comp of components) {
           const [compProduct] = await db.select().from(products).where(eq(products.id, comp.productId)).limit(1);
@@ -46,7 +116,6 @@ export async function createTransaction(data, userId, cashRegisterId) {
             );
           }
         }
-        // También verificar el stock de la propia promoción
         if (product.stock < item.quantity) {
           throw new Error(`Stock insuficiente para la promoción "${product.name}": hay ${product.stock}, se piden ${item.quantity}`);
         }
@@ -79,15 +148,16 @@ export async function createTransaction(data, userId, cashRegisterId) {
       }))
     );
 
-    // Descontar stock de cada producto vendido
     const affectedComponentIds = new Set();
 
     for (const item of data.items) {
       if (!item.productId) continue;
       const [product] = await db.select().from(products).where(eq(products.id, item.productId)).limit(1);
+      const recipe = await getDrinkRecipe(item.productId);
 
-      if (product?.isPromotion) {
-        // Descontar stock de cada componente de la promoción
+      if (recipe.length > 0) {
+        await consumeDrinkRecipe(product, item.quantity);
+      } else if (product?.isPromotion) {
         const components = await db.select().from(promotionItems).where(eq(promotionItems.promotionId, item.productId));
         for (const comp of components) {
           const deduct = comp.quantity * item.quantity;
@@ -97,7 +167,6 @@ export async function createTransaction(data, userId, cashRegisterId) {
             .where(eq(products.id, comp.productId));
           affectedComponentIds.add(comp.productId);
         }
-        // También descontar el stock de la promoción misma
         await db
           .update(products)
           .set({ stock: sql`MAX(0, stock - ${item.quantity})` })
@@ -111,7 +180,6 @@ export async function createTransaction(data, userId, cashRegisterId) {
       }
     }
 
-    // Recalcular el stock de todas las promos afectadas por cambios en sus componentes
     for (const productId of affectedComponentIds) {
       await recalcPromotionsForProduct(productId);
     }

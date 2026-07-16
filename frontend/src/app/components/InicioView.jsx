@@ -40,7 +40,7 @@ export function InicioView({ isCajaOpen, onOpenCaja, onCloseCaja, transactions }
       .finally(() => setLoading(false));
   }, []);
 
-  const recentSales = transactions.slice(0, 5).map((t) => ({
+  const recentSales = transactions.map((t) => ({
     id: t.id,
     time: t.time,
     total: t.total,
@@ -196,14 +196,39 @@ export function InicioView({ isCajaOpen, onOpenCaja, onCloseCaja, transactions }
             {barBottles.length === 0 ? (
               <p className="text-gray-500 text-sm">No hay botellas</p>
             ) : (
-              barBottles.map((bottle) => (
-                <div key={bottle.id} className="flex items-center justify-between p-2 bg-[#2a2a2a] rounded-lg border border-[#333]">
-                  <span className="text-gray-300 text-sm font-medium truncate pr-2" title={bottle.productName}>{bottle.productName}</span>
-                  <button onClick={() => handleEmptyBottle(bottle.id)} className="text-gray-500 hover:text-green-500 transition-colors p-1 bg-[#1a1a1a] rounded-md border border-[#333]" title="Marcar como terminada/vacía">
-                    <Check size={14} />
-                  </button>
-                </div>
-              ))
+              barBottles.map((bottle) => {
+                const served = Number(bottle.servedGlasses) || 0;
+                const perBottle = Number(bottle.glassesPerBottle) || 0;
+                const hasConfig = perBottle > 0;
+                const pct = hasConfig ? Math.min(100, Math.round((served / perBottle) * 100)) : 0;
+                return (
+                  <div key={bottle.id} className="p-2 bg-[#2a2a2a] rounded-lg border border-[#333]">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <span className="text-gray-300 text-sm font-medium truncate block" title={bottle.productName}>
+                          {bottle.productName}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {hasConfig
+                            ? `${served}/${perBottle} vasos${bottle.drinkGlassName ? ` · ${bottle.drinkGlassName}` : ""}`
+                            : "Sin vaso configurado"}
+                        </span>
+                      </div>
+                      <button onClick={() => handleEmptyBottle(bottle.id)} className="text-gray-500 hover:text-green-500 transition-colors p-1 bg-[#1a1a1a] rounded-md border border-[#333] shrink-0" title="Marcar como terminada/vacía">
+                        <Check size={14} />
+                      </button>
+                    </div>
+                    {hasConfig && (
+                      <div className="mt-2 h-1.5 bg-[#1a1a1a] rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-[#8B5CF6] rounded-full transition-all"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
@@ -211,12 +236,19 @@ export function InicioView({ isCajaOpen, onOpenCaja, onCloseCaja, transactions }
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
         <div className="xl:col-span-2">
-          <div className="bg-[#1a1a1a] rounded-xl border border-[#2a2a2a] overflow-hidden">
+          <div className="bg-[#1a1a1a] rounded-xl border border-[#2a2a2a] overflow-hidden flex flex-col">
             <div className="p-6 border-b border-[#2a2a2a] flex items-center justify-between">
-              <h2 className="text-white text-xl font-medium">Actividad Reciente</h2>
+              <div className="flex items-center gap-3">
+                <h2 className="text-white text-xl font-medium">Tickets de la Caja Actual</h2>
+                {recentSales.length > 0 && (
+                  <span className="bg-[#2a2a2a] text-gray-300 text-xs font-medium px-2.5 py-1 rounded-full border border-[#333]">
+                    {recentSales.length}
+                  </span>
+                )}
+              </div>
               <Clock size={20} className="text-gray-500" />
             </div>
-            <div className="p-2">
+            <div className="p-2 overflow-y-auto max-h-[600px] custom-scrollbar">
               {recentSales.length > 0 ? (
                 recentSales.map((sale) => (
                   <div key={sale.id} className="flex flex-col p-4 hover:bg-[#2a2a2a] rounded-lg transition-colors border-b border-[#2a2a2a] last:border-0">
@@ -336,23 +368,38 @@ export function InicioView({ isCajaOpen, onOpenCaja, onCloseCaja, transactions }
                 onChange={(e) => setSearchBottle(e.target.value)}
                 className="w-full bg-[#1a1a1a] text-white rounded-xl px-4 py-3 mb-3 border border-[#333] focus:border-[#6B21A8] outline-none"
               />
-              <select
-                value={selectedProductId}
-                onChange={(e) => setSelectedProductId(e.target.value)}
-                className="w-full bg-[#2a2a2a] text-white rounded-xl px-4 py-3 border border-[#333] focus:border-[#6B21A8] outline-none"
-                required
-              >
-                <option value="">Seleccione una botella...</option>
-                {products.filter(p => p.name.toLowerCase().includes(searchBottle.toLowerCase()) && Number(p.stock) > 0).map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} (Stock: {p.stock})
-                  </option>
-                ))}
-              </select>
+              <div className="max-h-52 overflow-y-auto rounded-xl border border-[#333] bg-[#1a1a1a] custom-scrollbar">
+                {(() => {
+                  const filtered = products.filter(
+                    (p) => (p.name || "").toLowerCase().includes(searchBottle.toLowerCase()) && Number(p.stock) > 0
+                  );
+                  if (filtered.length === 0) {
+                    return <p className="text-gray-500 text-sm p-3 text-center">Sin productos con stock disponible</p>;
+                  }
+                  return filtered.map((p) => {
+                    const isSelected = String(selectedProductId) === String(p.id);
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => setSelectedProductId(String(p.id))}
+                        className={`w-full text-left px-4 py-2.5 transition-colors flex items-center justify-between border-b border-[#2a2a2a] last:border-0 ${
+                          isSelected
+                            ? "bg-[#6B21A8]/25 text-white"
+                            : "text-gray-300 hover:bg-[#2a2a2a]"
+                        }`}
+                      >
+                        <span className="text-sm truncate pr-2">{p.name}</span>
+                        <span className="text-xs text-gray-500 shrink-0">Stock: {p.stock}</span>
+                      </button>
+                    );
+                  });
+                })()}
+              </div>
             </div>
             <div className="pt-4 flex gap-4">
-              <button type="button" onClick={() => { setShowBottleModal(false); setSearchBottle(""); }} className="flex-1 bg-[#2a2a2a] hover:bg-[#333] text-white py-4 rounded-xl transition-all">Cancelar</button>
-              <button type="submit" disabled={submittingBottle || !selectedProductId} className="flex-1 bg-[#6B21A8] hover:bg-[#581C87] disabled:opacity-60 text-white py-4 rounded-xl transition-all">{submittingBottle ? "Abriendo..." : "Confirmar Apertura"}</button>
+              <button type="button" onClick={() => { setShowBottleModal(false); setSearchBottle(""); setSelectedProductId(""); }} className="flex-1 bg-[#2a2a2a] hover:bg-[#333] text-white py-4 rounded-xl transition-all">Cancelar</button>
+              <button type="submit" disabled={submittingBottle || !selectedProductId} className="flex-1 bg-[#6B21A8] hover:bg-[#581C87] disabled:opacity-60 disabled:cursor-not-allowed text-white py-4 rounded-xl transition-all">{submittingBottle ? "Abriendo..." : "Confirmar Apertura"}</button>
             </div>
           </form>
         </div>
@@ -377,19 +424,34 @@ export function InicioView({ isCajaOpen, onOpenCaja, onCloseCaja, transactions }
                 onChange={(e) => setSearchWithdraw(e.target.value)}
                 className="w-full bg-[#1a1a1a] text-white rounded-xl px-4 py-3 mb-3 border border-[#333] focus:border-orange-500 outline-none"
               />
-              <select
-                value={withdrawProductId}
-                onChange={(e) => setWithdrawProductId(e.target.value)}
-                className="w-full bg-[#2a2a2a] text-white rounded-xl px-4 py-3 border border-[#333] focus:border-orange-500 outline-none"
-                required
-              >
-                <option value="">Seleccione un producto...</option>
-                {products.filter(p => p.name.toLowerCase().includes(searchWithdraw.toLowerCase()) && Number(p.stock) > 0).map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} (Stock: {p.stock})
-                  </option>
-                ))}
-              </select>
+              <div className="max-h-52 overflow-y-auto rounded-xl border border-[#333] bg-[#1a1a1a] custom-scrollbar">
+                {(() => {
+                  const filtered = products.filter(
+                    (p) => (p.name || "").toLowerCase().includes(searchWithdraw.toLowerCase()) && Number(p.stock) > 0
+                  );
+                  if (filtered.length === 0) {
+                    return <p className="text-gray-500 text-sm p-3 text-center">Sin productos con stock disponible</p>;
+                  }
+                  return filtered.map((p) => {
+                    const isSelected = String(withdrawProductId) === String(p.id);
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => setWithdrawProductId(String(p.id))}
+                        className={`w-full text-left px-4 py-2.5 transition-colors flex items-center justify-between border-b border-[#2a2a2a] last:border-0 ${
+                          isSelected
+                            ? "bg-orange-500/20 text-white"
+                            : "text-gray-300 hover:bg-[#2a2a2a]"
+                        }`}
+                      >
+                        <span className="text-sm truncate pr-2">{p.name}</span>
+                        <span className="text-xs text-gray-500 shrink-0">Stock: {p.stock}</span>
+                      </button>
+                    );
+                  });
+                })()}
+              </div>
             </div>
             <div>
               <label className="text-gray-400 text-sm block mb-2">Cantidad a retirar</label>
@@ -404,8 +466,8 @@ export function InicioView({ isCajaOpen, onOpenCaja, onCloseCaja, transactions }
               />
             </div>
             <div className="pt-4 flex gap-4">
-              <button type="button" onClick={() => { setShowWithdrawModal(false); setSearchWithdraw(""); setWithdrawQty(""); }} className="flex-1 bg-[#2a2a2a] hover:bg-[#333] text-white py-4 rounded-xl transition-all">Cancelar</button>
-              <button type="submit" disabled={submittingWithdraw || !withdrawProductId || !withdrawQty} className="flex-1 bg-orange-600 hover:bg-orange-700 disabled:opacity-60 text-white py-4 rounded-xl transition-all">{submittingWithdraw ? "Retirando..." : "Confirmar Retiro"}</button>
+              <button type="button" onClick={() => { setShowWithdrawModal(false); setSearchWithdraw(""); setWithdrawQty(""); setWithdrawProductId(""); }} className="flex-1 bg-[#2a2a2a] hover:bg-[#333] text-white py-4 rounded-xl transition-all">Cancelar</button>
+              <button type="submit" disabled={submittingWithdraw || !withdrawProductId || !withdrawQty} className="flex-1 bg-orange-600 hover:bg-orange-700 disabled:opacity-60 disabled:cursor-not-allowed text-white py-4 rounded-xl transition-all">{submittingWithdraw ? "Retirando..." : "Confirmar Retiro"}</button>
             </div>
           </form>
         </div>

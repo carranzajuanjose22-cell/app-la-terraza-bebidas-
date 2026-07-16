@@ -59,8 +59,11 @@ export function EstadisticasView() {
   const totalDiarios = gastosDiarios.reduce((sum, g) => sum + (Number(g.amount) || 0), 0);
   const totalGastosOperativos = totalFijos + totalDiarios;
 
-  // Calculamos el valor real del inventario basado en el costo y stock actual
-  const invertidoStock = productos.reduce((sum, p) => sum + ((Number(p.cost) || 0) * (Number(p.stock) || 0)), 0);
+  // Valor actual del inventario a costo. Excluimos promociones para no duplicar
+  // (una promo se compone de otros productos que ya se cuentan por separado).
+  const invertidoStock = productos
+    .filter((p) => !p.isPromotion)
+    .reduce((sum, p) => sum + ((Number(p.cost) || 0) * (Number(p.stock) || 0)), 0);
 
   // Separamos los gastos diarios (extracciones) por método para calcular la liquidez
   const gastosDiariosEfectivo = gastosDiarios
@@ -75,8 +78,10 @@ export function EstadisticasView() {
   const disponibleVirtual = virtual - gastosDiariosVirtual;
 
   const maxChartValue = Math.max(...chartData.map((d) => d.value), 1);
-  // El Balance Neto ahora considera Ingresos - Gastos Operativos (sin restar el stock invertido)
-  const balanceNeto = revenue - totalGastosOperativos;
+  // Balance Neto = Ingresos - Costo de mercaderia vendida (restock) - Gastos operativos.
+  // De esta forma el resultado refleja la ganancia real del negocio.
+  const gananciaBruta = revenue - restockCost;
+  const balanceNeto = gananciaBruta - totalGastosOperativos;
   const margenPorcentaje = revenue > 0 ? (balanceNeto / revenue) * 100 : 0;
 
   const handleDailyExpense = async (expenseData) => {
@@ -139,6 +144,7 @@ export function EstadisticasView() {
         <div className="bg-[#1a1a1a] rounded-xl p-6 border border-[#2a2a2a]">
           <div className="flex items-center gap-3 mb-4 text-orange-400"><Package size={20} /><h3 className="text-gray-400 font-medium">Invertido en Stock</h3></div>
           <p className="text-white text-3xl font-bold">${invertidoStock.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+          <p className="text-orange-400/70 text-sm mt-2">Valor actual del inventario (costo × stock)</p>
         </div>
         <div className="bg-[#1a1a1a] rounded-xl p-6 border border-[#2a2a2a] flex flex-col">
           <div className="flex items-center justify-between mb-4">
@@ -196,7 +202,23 @@ export function EstadisticasView() {
             Rentabilidad: {margenPorcentaje.toFixed(1)}%
           </p>
 
-          <div className={`border-t pt-4 mt-auto space-y-2 ${balanceNeto >= 0 ? "border-green-500/20" : "border-red-500/20"}`}>
+          <div className={`border-t pt-4 space-y-2 ${balanceNeto >= 0 ? "border-green-500/20" : "border-red-500/20"}`}>
+            <p className="text-xs text-gray-500 uppercase tracking-wider font-medium mb-1">Desglose</p>
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-gray-300">Ingresos</span>
+              <span className="text-green-400 font-medium">+${revenue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            </div>
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-gray-300">Costo de mercadería</span>
+              <span className="text-[#8B5CF6] font-medium">-${restockCost.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            </div>
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-gray-300">Gastos operativos</span>
+              <span className="text-red-400 font-medium">-${totalGastosOperativos.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            </div>
+          </div>
+
+          <div className={`border-t pt-4 mt-4 space-y-2 ${balanceNeto >= 0 ? "border-green-500/20" : "border-red-500/20"}`}>
             <p className="text-xs text-gray-500 uppercase tracking-wider font-medium mb-1">Liquidez Disponible</p>
             <div className="flex justify-between items-center text-sm">
               <span className="text-gray-300">En Efectivo</span>

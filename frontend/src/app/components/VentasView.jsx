@@ -18,7 +18,17 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
   const [products, setProducts] = useState([]);
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [barBottles, setBarBottles] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  async function fetchBarBottles() {
+    try {
+      const { data } = await api.get("/bar-bottles");
+      setBarBottles(data);
+    } catch {
+      setBarBottles([]);
+    }
+  }
 
   useEffect(() => {
     setLoading(true);
@@ -26,15 +36,72 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
       api.get("/products"),
       api.get("/payment-methods"),
       api.get("/categories"),
-    ]).then(([pRes, mRes, cRes]) => {
+      api.get("/bar-bottles").catch(() => ({ data: [] })),
+    ]).then(([pRes, mRes, cRes, bRes]) => {
       setProducts(pRes.data);
       setPaymentMethods(mRes.data);
       setCategories(cRes.data.map((c) => c.name));
+      setBarBottles(bRes.data || []);
     }).catch(() => {})
     .finally(() => setLoading(false));
   }, []);
 
   const allCategories = ["Todos", ...categories];
+
+  const getDrinkRecipe = (productOrItem) => {
+    if (Array.isArray(productOrItem.drinkBottleItems) && productOrItem.drinkBottleItems.length > 0) {
+      return productOrItem.drinkBottleItems.map((i) => ({
+        bottleProductId: Number(i.bottleProductId),
+        glassesUsed: Number(i.glassesUsed) || 1,
+        glassesPerBottle: Number(i.glassesPerBottle) || 0,
+      }));
+    }
+    if (productOrItem.bottleProductId) {
+      return [{
+        bottleProductId: Number(productOrItem.bottleProductId),
+        glassesUsed: 1,
+        glassesPerBottle: Number(productOrItem.glassesPerBottle) || 0,
+      }];
+    }
+    return [];
+  };
+
+  // Capacidad restante en barra para un tipo de botella.
+  const getAvailableGlasses = (bottleProductId, glassesPerBottle) => {
+    if (!bottleProductId || !glassesPerBottle || glassesPerBottle <= 0) return 0;
+    return barBottles
+      .filter((b) => Number(b.productId) === Number(bottleProductId))
+      .reduce((acc, b) => acc + Math.max(0, glassesPerBottle - (Number(b.servedGlasses) || 0)), 0);
+  };
+
+  // Porciones ya reservadas en el carrito para una botella (suma glassesUsed * qty).
+  const getCartReservedPortions = (bottleProductId, excludeProductId = null) => {
+    return cartItems.reduce((sum, item) => {
+      if (excludeProductId != null && item.id === excludeProductId) return sum;
+      const recipe = getDrinkRecipe(item);
+      return sum + recipe
+        .filter((ing) => Number(ing.bottleProductId) === Number(bottleProductId))
+        .reduce((s, ing) => s + ing.glassesUsed * item.quantity, 0);
+    }, 0);
+  };
+
+  // Máximo de unidades del trago que se pueden agregar ahora (limitado por la botella más escasa).
+  const getMaxDrinkUnitsAvailable = (product, excludeSelfFromCart = false) => {
+    const recipe = getDrinkRecipe(product);
+    if (recipe.length === 0) return 0;
+    let maxUnits = Infinity;
+    for (const ing of recipe) {
+      if (ing.glassesPerBottle <= 0 || ing.glassesUsed <= 0) return 0;
+      const available = getAvailableGlasses(ing.bottleProductId, ing.glassesPerBottle);
+      const reserved = getCartReservedPortions(
+        ing.bottleProductId,
+        excludeSelfFromCart ? product.id : null,
+      );
+      const free = Math.max(0, available - reserved);
+      maxUnits = Math.min(maxUnits, Math.floor(free / ing.glassesUsed));
+    }
+    return maxUnits === Infinity ? 0 : maxUnits;
+  };
 
   const filteredProducts = products.filter((product) => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -42,17 +109,90 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
     return matchesSearch && matchesCategory && product.isAvailable;
   });
 
-  const handleAddToCart = (product) => {
+  const handleAddToCart = async (product) => {
     const existing = cartItems.find((item) => item.id === product.id);
     const currentQty = existing ? existing.quantity : 0;
-    if (currentQty >= product.stock) {
-      toast.error("Sin stock suficiente", { description: `Solo hay ${product.stock} unidad${product.stock === 1 ? "" : "es"} de ${product.name}` });
+    const recipe = getDrinkRecipe(product);
+    const isDrinkGlass = recipe.length > 0;
+
+    // Receta inválida (trago a medias): no permitir venta
+    if (isDrinkGlass && recipe.some((ing) => !ing.bottleProductId || ing.glassesPerBottle <= 0 || ing.glassesUsed <= 0)) {
+      toast.error("Trago mal configurado", {
+        description: "Editá el producto en Inventario y completá botella, uso por trago y rendimiento.",
+      });
       return;
     }
+
+    // Refrescar botellas abiertas antes de validar un trago (evita datos viejos en memoria)
+    let bottlesSnapshot = barBottles;
+    if (isDrinkGlass) {
+      try {
+        const { data } = await api.get("/bar-bottles");
+        bottlesSnapshot = data || [];
+        setBarBottles(bottlesSnapshot);
+      } catch {
+        // si falla, usamos el snapshot en memoria
+      }
+    }
+
+    const availableFromSnapshot = (bottleProductId, glassesPerBottle) => {
+      if (!bottleProductId || !glassesPerBottle || glassesPerBottle <= 0) return 0;
+      return bottlesSnapshot
+        .filter((b) => Number(b.productId) === Number(bottleProductId))
+        .reduce((acc, b) => acc + Math.max(0, glassesPerBottle - (Number(b.servedGlasses) || 0)), 0);
+    };
+
+    if (isDrinkGlass) {
+      let maxUnits = Infinity;
+      let missingIng = null;
+      for (const ing of recipe) {
+        const available = availableFromSnapshot(ing.bottleProductId, ing.glassesPerBottle);
+        const reserved = getCartReservedPortions(ing.bottleProductId, product.id);
+        const free = Math.max(0, available - reserved);
+        const units = Math.floor(free / ing.glassesUsed);
+        if (units < maxUnits) {
+          maxUnits = units;
+          if (free < ing.glassesUsed * (currentQty + 1)) missingIng = ing;
+        }
+      }
+      if (maxUnits === Infinity) maxUnits = 0;
+
+      if (maxUnits < currentQty + 1) {
+        const bottleName = missingIng
+          ? (products.find((p) => Number(p.id) === Number(missingIng.bottleProductId))?.name || "una botella")
+          : "las botellas";
+        toast.error("Sin botella abierta en la barra", {
+          description: maxUnits <= 0 && currentQty === 0
+            ? `Abrí en Inicio → En Barra: ${bottleName}.`
+            : `Capacidad insuficiente de ${bottleName} para otro vaso.`,
+        });
+        return;
+      }
+    } else {
+      const stock = Number(product.stock) || 0;
+      if (currentQty >= stock) {
+        toast.error("Sin stock suficiente", {
+          description: stock <= 0
+            ? `No hay stock de ${product.name}`
+            : `Solo hay ${stock} unidad${stock === 1 ? "" : "es"} de ${product.name}`,
+        });
+        return;
+      }
+    }
+
     if (existing) {
       setCartItems((prev) => prev.map((item) => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item));
     } else {
-      setCartItems((prev) => [...prev, { id: product.id, name: product.name, price: product.price, stock: product.stock, quantity: 1 }]);
+      setCartItems((prev) => [...prev, {
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        stock: product.stock,
+        quantity: 1,
+        bottleProductId: product.bottleProductId || null,
+        glassesPerBottle: product.glassesPerBottle || null,
+        drinkBottleItems: recipe,
+      }]);
     }
     toast.success(`${product.name} agregado al carrito`);
   };
@@ -60,7 +200,18 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
   const handleUpdateQuantity = (id, quantity) => {
     if (quantity <= 0) { handleRemoveItem(id); return; }
     const item = cartItems.find((i) => i.id === id);
-    if (item && quantity > item.stock) {
+    if (!item) return;
+
+    const recipe = getDrinkRecipe(item);
+    if (recipe.length > 0) {
+      const maxUnits = getMaxDrinkUnitsAvailable(item, true);
+      if (quantity > maxUnits) {
+        toast.error("Sin botellas abiertas suficientes", {
+          description: `Solo podés cargar hasta ${maxUnits} de este trago con las botellas abiertas.`,
+        });
+        return;
+      }
+    } else if (quantity > item.stock) {
       toast.error("Sin stock suficiente", { description: `Solo hay ${item.stock} unidad${item.stock === 1 ? "" : "es"} de ${item.name}` });
       return;
     }
@@ -96,6 +247,7 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
       toast.success("Venta procesada exitosamente", { description: `Total cobrado: $${finalTotal.toFixed(2)}` });
       setCartItems([]);
       setShowPaymentModal(false);
+      await fetchBarBottles();
     } catch (err) {
       toast.error("No se pudo registrar la venta", { description: err.response?.data?.message || err.message });
       throw err;
@@ -183,9 +335,20 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
           {filteredProducts.length === 0 && (
             <p className="text-gray-500 text-center py-12">No hay productos disponibles</p>
           )}
-          {filteredProducts.map((product) => (
-            <ProductCard key={product.id} product={product} onAddToCart={handleAddToCart} />
-          ))}
+          {filteredProducts.map((product) => {
+            const recipe = getDrinkRecipe(product);
+            const isDrink = recipe.length > 0;
+            return (
+            <ProductCard
+              key={product.id}
+              product={product}
+              onAddToCart={handleAddToCart}
+              availableGlasses={
+                isDrink ? getMaxDrinkUnitsAvailable(product, true) : null
+              }
+            />
+            );
+          })}
         </div>
       </div>
 

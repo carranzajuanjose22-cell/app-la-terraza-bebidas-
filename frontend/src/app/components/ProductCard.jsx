@@ -2,10 +2,19 @@ import { Plus, ShoppingCart, Wine, Beer, Droplets, Layers, Package } from "lucid
 
 const ICON_MAP = { Wine, Beer, Droplets, Layers, Package };
 
-export function ProductCard({ product, onAddToCart }) {
+export function ProductCard({ product, onAddToCart, availableGlasses = null }) {
   const Icon = ICON_MAP[product.icon] || Package;
+  const isDrinkGlass = !!product.bottleProductId
+    || (Array.isArray(product.drinkBottleItems) && product.drinkBottleItems.length > 0);
+  const lowStock = !isDrinkGlass && product.stock <= product.minStock;
+  const noBottleOpen = isDrinkGlass && availableGlasses !== null && availableGlasses <= 0;
+  const bottleCount = product.drinkBottleItems?.length
+    || (product.bottleProductId ? 1 : 0);
+
   return (
-    <div className="bg-[#1e1e1e] border border-[#2a2a2a] rounded-xl p-3 md:p-4 flex items-center justify-between hover:border-[#6B21A8]/50 transition-colors duration-300">
+    <div className={`bg-[#1e1e1e] border rounded-xl p-3 md:p-4 flex items-center justify-between transition-colors duration-300 ${
+      noBottleOpen ? "border-orange-500/30 opacity-80" : "border-[#2a2a2a] hover:border-[#6B21A8]/50"
+    }`}>
       <div className="flex items-center gap-3 md:gap-4 flex-1 min-w-0">
         <div className="w-10 h-10 md:w-11 md:h-11 rounded-xl bg-[#6B21A8]/20 flex items-center justify-center shrink-0">
           <Icon size={20} className="text-[#8B5CF6]" />
@@ -13,13 +22,30 @@ export function ProductCard({ product, onAddToCart }) {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 mb-0.5 flex-wrap">
             <h3 className="text-white font-medium text-base md:text-lg leading-tight truncate">{product.name}</h3>
-            {product.stock <= product.minStock && (
+            {isDrinkGlass && (
+              <span className="bg-purple-500/10 text-purple-300 px-2 py-0.5 rounded text-xs font-medium border border-purple-500/20 shrink-0">
+                Trago{bottleCount > 1 ? ` · ${bottleCount} bot.` : ""}
+              </span>
+            )}
+            {noBottleOpen && (
+              <span className="bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded text-xs font-medium border border-orange-500/20 shrink-0">
+                Sin botella abierta
+              </span>
+            )}
+            {lowStock && (
               <span className="bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded text-xs font-medium border border-orange-500/20 shrink-0">
                 Stock Bajo
               </span>
             )}
           </div>
-          <p className="text-gray-400 text-xs md:text-sm">{product.category} · {product.stock} en stock</p>
+          <p className="text-gray-400 text-xs md:text-sm">
+            {product.category}
+            {isDrinkGlass
+              ? (availableGlasses !== null
+                ? ` · ${availableGlasses} disponible${availableGlasses === 1 ? "" : "s"}`
+                : " · Desde barra")
+              : ` · ${product.stock} en stock`}
+          </p>
         </div>
       </div>
       <div className="flex items-center gap-3 md:gap-6 ml-2 shrink-0">
