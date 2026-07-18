@@ -12,6 +12,7 @@ export function CajaView({ role = "admin", isCajaOpen, register, onOpenCaja, onC
   const [searchDate, setSearchDate] = useState("");
   const [cajasCerradas, setCajasCerradas] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [loadingDetailId, setLoadingDetailId] = useState(null);
 
   useEffect(() => {
     if (role === "admin") {
@@ -48,6 +49,25 @@ export function CajaView({ role = "admin", isCajaOpen, register, onOpenCaja, onC
       setOpeningAmount("0");
       toast.success("Caja abierta exitosamente");
     } catch (err) { toast.error(err.response?.data?.message || "Error al abrir caja"); }
+  };
+
+  const handleToggleCajaDetail = async (cajaId) => {
+    if (expandedId === cajaId) {
+      setExpandedId(null);
+      return;
+    }
+    setExpandedId(cajaId);
+    const current = cajasCerradas.find((c) => c.id === cajaId);
+    if (current?.soldItems) return;
+    setLoadingDetailId(cajaId);
+    try {
+      const { data } = await api.get(`/cash-register/closed/${cajaId}`);
+      setCajasCerradas((prev) => prev.map((c) => (c.id === cajaId ? { ...c, ...data } : c)));
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Error al cargar el detalle de la caja");
+    } finally {
+      setLoadingDetailId(null);
+    }
   };
 
   const filteredCajas = searchDate
@@ -124,12 +144,15 @@ export function CajaView({ role = "admin", isCajaOpen, register, onOpenCaja, onC
                         <td className="p-4"><div className="flex items-center gap-2 text-white"><Clock size={16} className="text-gray-400" />{caja.closedAt ? new Date(caja.closedAt).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" }) : "-"}</div></td>
                         <td className="p-4"><span className="text-white font-bold">${Number(caja.totalIngresos || 0).toFixed(2)}</span></td>
                         <td className="p-4 text-right">
-                          <button onClick={() => setExpandedId(expandedId === caja.id ? null : caja.id)} className="text-gray-400 hover:text-white transition-colors p-2"><Eye size={20} /></button>
+                          <button onClick={() => handleToggleCajaDetail(caja.id)} className="text-gray-400 hover:text-white transition-colors p-2"><Eye size={20} /></button>
                         </td>
                       </tr>
                       {expandedId === caja.id && (
                         <tr className="border-b border-[#2a2a2a] bg-[#121212]">
                           <td colSpan={4} className="p-6">
+                            {loadingDetailId === caja.id && (
+                              <p className="text-gray-400 text-sm mb-4">Cargando detalle…</p>
+                            )}
                             <h4 className="text-white font-medium mb-4">Detalle de Caja Cerrada</h4>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                               {[

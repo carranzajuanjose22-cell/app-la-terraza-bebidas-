@@ -32,16 +32,8 @@ export async function openRegister(userId, initialCash) {
   return register;
 }
 
-export async function closeRegister(registerId) {
-  const [register] = await db
-    .select()
-    .from(cashRegisters)
-    .where(eq(cashRegisters.id, registerId))
-    .limit(1);
-
-  if (!register) throw new Error("Caja no encontrada");
-  if (register.status === "closed") throw new Error("La caja ya está cerrada");
-
+/** Calcula ingresos/efectivo/transferencia en vivo a partir de las ventas de la caja. */
+export async function computeRegisterTotals(registerId) {
   const txs = await db.select().from(transactions).where(eq(transactions.cashRegisterId, registerId));
 
   let totalEfectivo = 0;
@@ -64,6 +56,26 @@ export async function closeRegister(registerId) {
     }
   }
 
+  return {
+    totalEfectivo,
+    totalTransferencia,
+    totalIngresos,
+    transactionsCount: txs.length,
+  };
+}
+
+export async function closeRegister(registerId) {
+  const [register] = await db
+    .select()
+    .from(cashRegisters)
+    .where(eq(cashRegisters.id, registerId))
+    .limit(1);
+
+  if (!register) throw new Error("Caja no encontrada");
+  if (register.status === "closed") throw new Error("La caja ya está cerrada");
+
+  const totals = await computeRegisterTotals(registerId);
+
   // Los gastos diarios / extracciones NO se restan del totalEfectivo.
   // Se almacenan en la tabla dailyExpenses con cashRegisterId y se consultan
   // por separado en getRegisterWithItems para mostrar el detalle.
@@ -74,10 +86,7 @@ export async function closeRegister(registerId) {
     .set({
       status: "closed",
       closedAt: new Date().toISOString(),
-      totalEfectivo,
-      totalTransferencia,
-      totalIngresos,
-      transactionsCount: txs.length,
+      ...totals,
     })
     .where(eq(cashRegisters.id, registerId))
     .returning();

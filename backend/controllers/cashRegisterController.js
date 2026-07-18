@@ -19,9 +19,13 @@ export async function getStatus(req, res) {
         }
         return res.json({ isOpen: false, register: null });
       }
+
+      // Totales en vivo (aún no persistidos hasta el cierre) para estadísticas del día
+      const totals = await service.computeRegisterTotals(register.id);
+      return res.json({ isOpen: true, register: { ...register, ...totals } });
     }
 
-    res.json({ isOpen: !!register, register: register || null });
+    res.json({ isOpen: false, register: null });
   } catch (e) { res.status(500).json({ message: e.message }); }
 }
 
@@ -43,8 +47,19 @@ export async function close(req, res) {
 
 export async function getClosedRegisters(req, res) {
   try {
+    // Lista liviana: los totales ya están en cash_registers. El detalle (productos,
+    // recargos, gastos) se pide bajo demanda en GET /closed/:id.
     const registers = await service.getClosedRegisters(req.query.date || null);
-    const withItems = await Promise.all(registers.map((r) => service.getRegisterWithItems(r.id)));
-    res.json(withItems);
+    res.json(registers);
   } catch (e) { res.status(500).json({ message: e.message }); }
+}
+
+export async function getClosedRegisterDetail(req, res) {
+  try {
+    const detail = await service.getRegisterWithItems(Number(req.params.id));
+    if (detail.status !== "closed") {
+      return res.status(400).json({ message: "La caja no está cerrada" });
+    }
+    res.json(detail);
+  } catch (e) { res.status(404).json({ message: e.message }); }
 }

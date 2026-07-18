@@ -15,8 +15,15 @@ import dailyExpenseRoutes from "./routes/dailyExpenseRoutes.js";
 import barBottleRoutes from "./routes/barBottleRoutes.js";
 import internalWithdrawalRoutes from "./routes/internalWithdrawalRoutes.js";
 import { db } from "./db/index.js";
-import { transactionItems, products, barBottles, cashRegisters, dailyExpenses, internalWithdrawals, stockModifications } from "./models/schema.js";
-import { eq, isNull } from "drizzle-orm";
+import { transactionItems, products, barBottles, cashRegisters, dailyExpenses, internalWithdrawals, stockModifications, transactions } from "./models/schema.js";
+import { and, eq, gte, isNull, lt } from "drizzle-orm";
+
+/** Suma un día calendario a YYYY-MM-DD (para filtro exclusivo superior). */
+function nextDayYYYYMMDD(dateStr) {
+  const d = new Date(`${dateStr}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -60,31 +67,53 @@ app.use("/api/internal-withdrawals", internalWithdrawalRoutes);
 app.get("/api/stats/restock", async (req, res) => {
   try {
     let total = 0;
+    const from = typeof req.query.from === "string" ? req.query.from.slice(0, 10) : null;
+    const to = typeof req.query.to === "string" ? req.query.to.slice(0, 10) : null;
+    const toExclusive = to ? nextDayYYYYMMDD(to) : null;
 
     // Sumar el costo de todo lo vendido en el POS (a costo actual del producto).
     // Excluimos los "vasos de trago" (bottleProductId != null) porque su costo ya
     // se contabilizo cuando se abrio la botella en la barra; contarlo aca seria
     // duplicar el gasto.
+    const txConds = [isNull(products.bottleProductId)];
+    if (from) txConds.push(gte(transactions.createdAt, from));
+    if (toExclusive) txConds.push(lt(transactions.createdAt, toExclusive));
+
     const txItems = await db.select({ quantity: transactionItems.quantity, cost: products.cost })
       .from(transactionItems)
       .innerJoin(products, eq(transactionItems.productId, products.id))
-      .where(isNull(products.bottleProductId));
+      .innerJoin(transactions, eq(transactionItems.transactionId, transactions.id))
+      .where(and(...txConds));
     txItems.forEach(i => total += (i.quantity * i.cost));
 
     // Sumar el costo de todas las botellas que se abrieron en la barra.
-    const bottles = await db.select({ cost: products.cost })
+    const bottleConds = [];
+    if (from) bottleConds.push(gte(barBottles.createdAt, from));
+    if (toExclusive) bottleConds.push(lt(barBottles.createdAt, toExclusive));
+
+    const bottlesQuery = db.select({ cost: products.cost })
       .from(barBottles)
       .innerJoin(products, eq(barBottles.productId, products.id));
+    const bottles = bottleConds.length
+      ? await bottlesQuery.where(and(...bottleConds))
+      : await bottlesQuery;
     bottles.forEach(b => total += b.cost);
 
     // Los retiros internos ya guardan el costo del momento del retiro (product.cost * quantity),
     // asi que se usa directo sin join para respetar el historico.
-    const withdrawals = await db.select({ cost: internalWithdrawals.cost })
-      .from(internalWithdrawals);
+    const wConds = [];
+    if (from) wConds.push(gte(internalWithdrawals.createdAt, from));
+    if (toExclusive) wConds.push(lt(internalWithdrawals.createdAt, toExclusive));
+
+    const withdrawalsQuery = db.select({ cost: internalWithdrawals.cost }).from(internalWithdrawals);
+    const withdrawals = wConds.length
+      ? await withdrawalsQuery.where(and(...wConds))
+      : await withdrawalsQuery;
     withdrawals.forEach(w => total += (Number(w.cost) || 0));
 
-    res.json({ restockCost: total });
+    res.json({ restockCost: total, from: from || null, to: to || null });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Error calculando restock" });
   }
 });
