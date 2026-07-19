@@ -5,21 +5,6 @@ export async function getStatus(req, res) {
     const register = await service.getOpenRegister();
 
     if (register) {
-      // Auto-cierre de cajas abiertas de días anteriores
-      // Comparamos sólo la parte de fecha (YYYY-MM-DD) en UTC
-      const todayStr = new Date().toISOString().slice(0, 10);
-      const openedStr = (register.openedAt || "").slice(0, 10);
-
-      if (openedStr && openedStr < todayStr) {
-        // La caja quedó abierta de un día anterior → la cerramos automáticamente
-        try {
-          await service.closeRegister(register.id);
-        } catch (_) {
-          // Si ya estaba cerrada o falló algo, lo ignoramos silenciosamente
-        }
-        return res.json({ isOpen: false, register: null });
-      }
-
       // Totales en vivo (aún no persistidos hasta el cierre) para estadísticas del día
       const totals = await service.computeRegisterTotals(register.id);
       return res.json({ isOpen: true, register: { ...register, ...totals } });

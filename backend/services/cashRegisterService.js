@@ -1,6 +1,7 @@
 import { eq, desc } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { cashRegisters, transactions, transactionItems, transactionPayments, dailyExpenses } from "../models/schema.js";
+import { getBusinessDateKeyFromIso } from "../utils/businessDate.js";
 
 export async function getOpenRegister() {
   const [register] = await db
@@ -14,15 +15,7 @@ export async function getOpenRegister() {
 export async function openRegister(userId, initialCash) {
   const existing = await getOpenRegister();
   if (existing) {
-    // Si la caja abierta es de un día anterior, la cerramos automáticamente
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const openedStr = (existing.openedAt || "").slice(0, 10);
-
-    if (openedStr && openedStr < todayStr) {
-      await closeRegister(existing.id);
-    } else {
-      throw new Error("Ya hay una caja abierta para hoy");
-    }
+    throw new Error("Ya hay una caja abierta. Cerrala manualmente antes de abrir otra.");
   }
 
   const [register] = await db
@@ -102,7 +95,7 @@ export async function getClosedRegisters(date = null) {
     .orderBy(desc(cashRegisters.closedAt));
 
   if (date) {
-    return allClosed.filter((c) => c.closedAt && c.closedAt.startsWith(date));
+    return allClosed.filter((c) => getBusinessDateKeyFromIso(c.closedAt) === date);
   }
   return allClosed;
 }

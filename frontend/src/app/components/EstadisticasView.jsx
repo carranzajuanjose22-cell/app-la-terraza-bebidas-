@@ -4,6 +4,7 @@ import api from "../../services/api.js";
 import { Loader } from "./Loader.jsx";
 import { DailyExpenseModal } from "./DailyExpenseModal.jsx";
 import { toast } from "sonner";
+import { getBusinessDateKey } from "../../utils/businessDate.js";
 
 const PERIODS = [
   { id: "total", label: "Total" },
@@ -57,19 +58,13 @@ function toYYYYMMDD(d) {
   return `${y}-${m}-${day}`;
 }
 
-/** Fecha calendario YYYY-MM-DD tal como se guarda/muestra en Caja (sin shift de TZ). */
-function dateKey(str) {
-  if (!str) return null;
-  return str.slice(0, 10);
-}
-
-/** Fecha de negocio de una caja: cierre si existe, si no apertura. */
+/** Fecha de negocio de una caja: cierre si existe, si no apertura (zona Argentina). */
 function cajaDateKey(caja) {
-  return dateKey(caja.closedAt) || dateKey(caja.openedAt);
+  return getBusinessDateKey(caja.closedAt) || getBusinessDateKey(caja.openedAt);
 }
 
 function inRange(dateStr, from, to) {
-  const key = dateKey(dateStr);
+  const key = getBusinessDateKey(dateStr);
   if (!key) return false;
   if (from && key < toYYYYMMDD(from)) return false;
   if (to && key > toYYYYMMDD(to)) return false;

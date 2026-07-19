@@ -3,6 +3,7 @@ import { Lock, Calendar, Clock, Unlock, Eye } from "lucide-react";
 import { toast } from "sonner";
 import api from "../../services/api.js";
 import { Loader } from "./Loader.jsx";
+import { formatBusinessDate, formatBusinessTime, getBusinessDateKey } from "../../utils/businessDate.js";
 
 export function CajaView({ role = "admin", isCajaOpen, register, onOpenCaja, onCloseCaja, transactions, onRefresh }) {
   const [showClosureModal, setShowClosureModal] = useState(false);
@@ -71,7 +72,7 @@ export function CajaView({ role = "admin", isCajaOpen, register, onOpenCaja, onC
   };
 
   const filteredCajas = searchDate
-    ? cajasCerradas.filter((c) => c.closedAt && c.closedAt.startsWith(searchDate))
+    ? cajasCerradas.filter((c) => getBusinessDateKey(c.closedAt) === searchDate)
     : cajasCerradas;
 
   const initialCash = register?.initialCash || 0;
@@ -140,8 +141,8 @@ export function CajaView({ role = "admin", isCajaOpen, register, onOpenCaja, onC
                   filteredCajas.map((caja) => (
                     <Fragment key={caja.id}>
                       <tr className={`border-b border-[#2a2a2a] hover:bg-[#2a2a2a] transition-colors ${expandedId === caja.id ? "bg-[#2a2a2a]" : ""}`}>
-                        <td className="p-4"><div className="flex items-center gap-2 text-white"><Calendar size={16} className="text-gray-400" />{caja.closedAt?.split("T")[0] || "-"}</div></td>
-                        <td className="p-4"><div className="flex items-center gap-2 text-white"><Clock size={16} className="text-gray-400" />{caja.closedAt ? new Date(caja.closedAt).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" }) : "-"}</div></td>
+                        <td className="p-4"><div className="flex items-center gap-2 text-white"><Calendar size={16} className="text-gray-400" />{formatBusinessDate(caja.closedAt)}</div></td>
+                        <td className="p-4"><div className="flex items-center gap-2 text-white"><Clock size={16} className="text-gray-400" />{formatBusinessTime(caja.closedAt)}</div></td>
                         <td className="p-4"><span className="text-white font-bold">${Number(caja.totalIngresos || 0).toFixed(2)}</span></td>
                         <td className="p-4 text-right">
                           <button onClick={() => handleToggleCajaDetail(caja.id)} className="text-gray-400 hover:text-white transition-colors p-2"><Eye size={20} /></button>
