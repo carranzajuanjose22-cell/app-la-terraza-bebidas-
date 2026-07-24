@@ -18,9 +18,26 @@ export function getBusinessDateKey(date = new Date()) {
 
 export function getBusinessDateKeyFromIso(iso) {
   if (!iso) return null;
-  const d = new Date(iso);
+  const trimmed = iso.trim();
+  const d = trimmed.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(trimmed)
+    ? new Date(trimmed)
+    : new Date(`${(trimmed.includes("T") ? trimmed : trimmed.replace(" ", "T"))}Z`);
   if (Number.isNaN(d.getTime())) return null;
   return getBusinessDateKey(d);
+}
+
+/** HH:MM en la zona horaria del negocio. */
+export function getBusinessTimeKey(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: BUSINESS_TZ,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+
+  const h = parts.find((p) => p.type === "hour")?.value ?? "00";
+  const m = parts.find((p) => p.type === "minute")?.value ?? "00";
+  return `${h}:${m}`;
 }
 
 /** true si la fecha ISO cae en un día de negocio anterior al de referencia. */

@@ -2,6 +2,7 @@ import { and, asc, eq, desc, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { transactions, transactionItems, transactionPayments, products, promotionItems, barBottles } from "../models/schema.js";
 import { recalcPromotionsForProduct, getDrinkRecipe } from "./productService.js";
+import { getBusinessDateKey, getBusinessTimeKey } from "../utils/businessDate.js";
 
 async function getAvailableGlassesForBottle(bottleProductId, glassesPerBottle) {
   const openBottles = await db
@@ -128,8 +129,8 @@ export async function createTransaction(data, userId, cashRegisterId) {
   }
 
   const now = new Date();
-  const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  const time = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  const date = getBusinessDateKey(now);
+  const time = getBusinessTimeKey(now);
 
   const [tx] = await db
     .insert(transactions)

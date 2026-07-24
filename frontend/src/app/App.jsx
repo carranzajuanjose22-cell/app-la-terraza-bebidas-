@@ -11,6 +11,7 @@ import { EstadisticasView } from "./components/EstadisticasView.jsx";
 import { UsuariosView } from "./components/UsuariosView.jsx";
 import { Loader } from "./components/Loader.jsx";
 import api from "../services/api.js";
+import { getTransactionDisplayTime } from "../utils/businessDate.js";
 import { SubscriptionProvider } from "./modules/subscription/SubscriptionContext.jsx";
 import { SubscriptionOverlay } from "./modules/subscription/SubscriptionOverlay.jsx";
 import { CreatorDashboard } from "./modules/subscription/CreatorDashboard.jsx";
@@ -65,7 +66,8 @@ export default function App() {
         setTransactions(txRes.data.map((t) => ({
           id: String(t.id),
           date: t.date,
-          time: t.time,
+          createdAt: t.createdAt,
+          time: getTransactionDisplayTime(t),
           total: t.total,
           payments: t.payments.map((p) => ({ type: p.methodName, amount: p.amount })),
           items: t.items.map((i) => ({ name: i.productName, quantity: i.quantity, total: i.total })),
@@ -104,7 +106,8 @@ export default function App() {
     const normalized = {
       id: String(data.id),
       date: data.date,
-      time: data.time,
+      createdAt: data.createdAt,
+      time: getTransactionDisplayTime(data),
       total: data.total,
       payments: data.payments.map((p) => ({ type: p.methodName, amount: p.amount })),
       items: data.items.map((i) => ({ name: i.productName, quantity: i.quantity, total: i.total })),
