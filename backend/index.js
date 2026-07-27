@@ -15,7 +15,7 @@ import dailyExpenseRoutes from "./routes/dailyExpenseRoutes.js";
 import barBottleRoutes from "./routes/barBottleRoutes.js";
 import internalWithdrawalRoutes from "./routes/internalWithdrawalRoutes.js";
 import { db } from "./db/index.js";
-import { transactionItems, products, barBottles, cashRegisters, dailyExpenses, internalWithdrawals, stockModifications, transactions } from "./models/schema.js";
+import { transactionItems, products, barBottles, cashRegisters, dailyExpenses, internalWithdrawals, stockModifications, transactions, fixedExpenses } from "./models/schema.js";
 import { and, eq, gte, isNull, lt } from "drizzle-orm";
 
 /** Suma un día calendario a YYYY-MM-DD (para filtro exclusivo superior). */
@@ -234,6 +234,9 @@ app.get("/api/stats/history", async (req, res) => {
     const allCajas = await db.select().from(cashRegisters).where(eq(cashRegisters.status, "closed"));
     // Traer todos los gastos diarios
     const allGastos = await db.select().from(dailyExpenses);
+    // Traer gastos fijos
+    const allFijos = await db.select().from(fixedExpenses);
+    const totalFijos = allFijos.reduce((sum, g) => sum + (Number(g.amount) || 0), 0);
 
     // Función para obtener la clave YYYY-MM-DD de una caja (negocio Argentina)
     const { getBusinessDateKeyFromIso } = await import("./utils/businessDate.js");
@@ -293,7 +296,7 @@ app.get("/api/stats/history", async (req, res) => {
           efectivo: 0,
           virtual: 0,
           cajasCount: 0,
-          gastosOperativos: 0,
+          gastosOperativos: groupBy === "month" ? totalFijos : 0,
         };
       }
       periodMap[periodKey].ingresos += Number(caja.totalIngresos) || 0;
