@@ -221,6 +221,110 @@ app.get("/api/stats/activity-log", async (req, res) => {
   }
 });
 
+/**
+ * GET /api/stats/history?groupBy=week|month
+ * Devuelve el historial de períodos (semanas o meses) con las estadísticas de cada uno.
+ * Usa la fecha de negocio (zona Argentina) de closedAt/openedAt de la caja.
+ */
+app.get("/api/stats/history", async (req, res) => {
+  try {
+    const groupBy = req.query.groupBy === "month" ? "month" : "week";
+
+    // Traer todas las cajas cerradas
+    const allCajas = await db.select().from(cashRegisters).where(eq(cashRegisters.status, "closed"));
+    // Traer todos los gastos diarios
+    const allGastos = await db.select().from(dailyExpenses);
+
+    // Función para obtener la clave YYYY-MM-DD de una caja (negocio Argentina)
+    const { getBusinessDateKeyFromIso } = await import("./utils/businessDate.js");
+
+    function dateKeyForCaja(caja) {
+      return getBusinessDateKeyFromIso(caja.closedAt) || getBusinessDateKeyFromIso(caja.openedAt);
+    }
+
+    // Agrupar por semana (lunes → domingo) o mes
+    function getPeriodKey(dateKey) {
+      if (!dateKey) return null;
+      const [y, m, d] = dateKey.split("-").map(Number);
+      const date = new Date(y, m - 1, d);
+      if (groupBy === "month") {
+        return `${y}-${String(m).padStart(2, "0")}`;
+      }
+      // semana: calcular lunes
+      const day = date.getDay(); // 0=domingo
+      const diff = day === 0 ? -6 : 1 - day;
+      const monday = new Date(date);
+      monday.setDate(date.getDate() + diff);
+      const my = monday.getFullYear();
+      const mm = String(monday.getMonth() + 1).padStart(2, "0");
+      const md = String(monday.getDate()).padStart(2, "0");
+      return `${my}-${mm}-${md}`; // clave = fecha del lunes
+    }
+
+    function getPeriodLabel(key) {
+      if (groupBy === "month") {
+        const [y, m] = key.split("-");
+        const date = new Date(Number(y), Number(m) - 1, 1);
+        return date.toLocaleDateString("es-AR", { month: "long", year: "numeric" });
+      }
+      // semana: "DD/MM → DD/MM/YYYY"
+      const [y, m, d] = key.split("-").map(Number);
+      const monday = new Date(y, m - 1, d);
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      const fmt = { day: "2-digit", month: "2-digit" };
+      const fmtFull = { day: "2-digit", month: "2-digit", year: "numeric" };
+      return `${monday.toLocaleDateString("es-AR", fmt)} → ${sunday.toLocaleDateString("es-AR", fmtFull)}`;
+    }
+
+    // Mapas de acumulación por período
+    const periodMap = {};
+
+    for (const caja of allCajas) {
+      const dateKey = dateKeyForCaja(caja);
+      const periodKey = getPeriodKey(dateKey);
+      if (!periodKey) continue;
+
+      if (!periodMap[periodKey]) {
+        periodMap[periodKey] = {
+          key: periodKey,
+          label: getPeriodLabel(periodKey),
+          ingresos: 0,
+          efectivo: 0,
+          virtual: 0,
+          cajasCount: 0,
+          gastosOperativos: 0,
+        };
+      }
+      periodMap[periodKey].ingresos += Number(caja.totalIngresos) || 0;
+      periodMap[periodKey].efectivo += Number(caja.totalEfectivo) || 0;
+      periodMap[periodKey].virtual += Number(caja.totalTransferencia) || 0;
+      periodMap[periodKey].cajasCount += 1;
+    }
+
+    // Sumar gastos diarios por período
+    for (const gasto of allGastos) {
+      const dateKey = getBusinessDateKeyFromIso(gasto.createdAt);
+      const periodKey = getPeriodKey(dateKey);
+      if (!periodKey || !periodMap[periodKey]) continue;
+      periodMap[periodKey].gastosOperativos += Number(gasto.amount) || 0;
+    }
+
+    // Calcular balance neto por período
+    const periods = Object.values(periodMap)
+      .map((p) => ({
+        ...p,
+        balanceNeto: p.ingresos - p.gastosOperativos,
+      }))
+      .sort((a, b) => b.key.localeCompare(a.key)); // más reciente primero
+
+    res.json(periods);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Error obteniendo historial por período" });
+  }
+});
+
 app.use((req, res) => res.status(404).json({ message: "Ruta no encontrada" }));
 app.use((err, req, res, next) => {
   console.error(err.stack);

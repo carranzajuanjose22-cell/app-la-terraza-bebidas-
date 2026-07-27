@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo } from "react";
-import { BarChart3, DollarSign, Package, Banknote, CreditCard, TrendingDown, Wallet, Plus, RefreshCw, PackageMinus, Unlock, Lock, Wine, Clock } from "lucide-react";
+import { Calendar, DollarSign, Package, Banknote, CreditCard, TrendingDown, Wallet, Plus, RefreshCw, PackageMinus, Unlock, Lock, Wine, Clock, TableProperties, TrendingUp } from "lucide-react";
 import api from "../../services/api.js";
 import { Loader } from "./Loader.jsx";
 import { DailyExpenseModal } from "./DailyExpenseModal.jsx";
 import { toast } from "sonner";
 import { getBusinessDateKey } from "../../utils/businessDate.js";
+
 
 const PERIODS = [
   { id: "total", label: "Total" },
@@ -196,6 +197,9 @@ export function EstadisticasView() {
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [restockCost, setRestockCost] = useState(0);
   const [activityLog, setActivityLog] = useState([]);
+  const [historyGroupBy, setHistoryGroupBy] = useState("week");
+  const [historyData, setHistoryData] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const range = useMemo(() => getPeriodRange(period), [period]);
 
@@ -233,6 +237,16 @@ export function EstadisticasView() {
       .catch(() => setRestockCost(0));
   }, [range.from, range.to, period]);
 
+  // Historial por período (semana/mes)
+  useEffect(() => {
+    setHistoryLoading(true);
+    api
+      .get("/stats/history", { params: { groupBy: historyGroupBy } })
+      .then((r) => setHistoryData(r.data || []))
+      .catch(() => setHistoryData([]))
+      .finally(() => setHistoryLoading(false));
+  }, [historyGroupBy]);
+
   const cajasPeriodo = useMemo(() => {
     const closed = (cajasCerradas || []).filter((c) => {
       if (period === "total") return true;
@@ -265,10 +279,7 @@ export function EstadisticasView() {
   const efectivo = cajasPeriodo.reduce((sum, c) => sum + (c.totalEfectivo || 0), 0);
   const virtual = cajasPeriodo.reduce((sum, c) => sum + (c.totalTransferencia || 0), 0);
 
-  const chartData = useMemo(
-    () => buildChartData(period, cajasPeriodo, range.from, range.to),
-    [period, cajasPeriodo, range.from, range.to],
-  );
+
 
   const totalFijos = gastosFijosPeriodo.reduce((sum, g) => sum + (Number(g.amount) || 0), 0);
   const totalDiarios = gastosDiariosPeriodo.reduce((sum, g) => sum + (Number(g.amount) || 0), 0);
@@ -289,19 +300,10 @@ export function EstadisticasView() {
   const disponibleEfectivo = efectivo - gastosDiariosEfectivo;
   const disponibleVirtual = virtual - gastosDiariosVirtual;
 
-  const maxChartValue = Math.max(...chartData.map((d) => d.value), 1);
   const gananciaBruta = revenue - restockCost;
   const balanceNeto = gananciaBruta - totalGastosOperativos;
   const margenPorcentaje = revenue > 0 ? (balanceNeto / revenue) * 100 : 0;
 
-  const chartTitle =
-    period === "total"
-      ? "Evolución de Ingresos (histórico)"
-      : period === "mensual"
-        ? "Evolución de Ingresos (días del mes)"
-        : period === "semanal"
-          ? "Evolución de Ingresos (lun – dom)"
-          : "Ingresos del día";
 
   const handleDailyExpense = async (expenseData) => {
     try {
@@ -462,39 +464,14 @@ export function EstadisticasView() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-        <div className="lg:col-span-2 bg-[#1a1a1a] rounded-xl border border-[#2a2a2a] p-6">
-          <div className="flex items-center gap-3 mb-8">
-            <BarChart3 className="text-[#8B5CF6]" size={24} />
-            <h2 className="text-white text-xl font-medium">{chartTitle}</h2>
-          </div>
-          <div className={`h-64 flex items-end justify-between gap-1 md:gap-2 mt-8 ${period === "mensual" ? "overflow-x-auto" : ""}`}>
-            {chartData.map((d, index) => {
-              const heightPercentage = Math.max((d.value / maxChartValue) * 100, d.value > 0 ? 5 : 2);
-              return (
-                <div key={index} className={`flex flex-col items-center gap-2 group relative ${period === "mensual" ? "min-w-[1.1rem] flex-1" : "flex-1"}`}>
-                  <div className="absolute -top-10 opacity-0 group-hover:opacity-100 transition-opacity bg-white text-black text-xs font-bold py-1 px-2 rounded pointer-events-none z-10 whitespace-nowrap">
-                    ${d.value.toFixed(2)}
-                  </div>
-                  <div
-                    className="w-full max-w-[4rem] bg-[#6B21A8] hover:bg-[#8B5CF6] transition-colors rounded-t-sm"
-                    style={{ height: `${heightPercentage}%` }}
-                  />
-                  <span className={`text-gray-400 whitespace-nowrap ${period === "mensual" ? "text-[10px]" : "text-sm"}`}>
-                    {d.label}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="bg-[#1a1a1a] rounded-xl border border-[#2a2a2a] p-6 flex flex-col">
+      {/* ── Historial de Movimientos ── */}
+      <div className="mb-8">
+        <div className="bg-[#1a1a1a] rounded-xl border border-[#2a2a2a] p-6">
           <div className="flex items-center gap-3 mb-6">
             <Clock className="text-blue-400" size={24} />
             <h2 className="text-white text-xl font-medium">Historial de Movimientos</h2>
           </div>
-          <div className="flex-1 overflow-y-auto max-h-[300px] pr-2 space-y-3 custom-scrollbar">
+          <div className="overflow-y-auto max-h-[320px] pr-2 space-y-3 custom-scrollbar">
             {activityLogPeriodo.length === 0 ? (
               <p className="text-gray-500 text-sm">No hay movimientos en este período</p>
             ) : (
@@ -518,6 +495,139 @@ export function EstadisticasView() {
               })
             )}
           </div>
+        </div>
+      </div>
+
+      {/* ── Histórico por Período ── */}
+      <div className="mb-8">
+        <div className="bg-[#1a1a1a] rounded-xl border border-[#2a2a2a] p-6">
+          {/* Cabecera + filtros */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+            <div className="flex items-center gap-3">
+              <TableProperties className="text-[#8B5CF6]" size={22} />
+              <div>
+                <h2 className="text-white text-xl font-medium">Histórico por Período</h2>
+                <p className="text-gray-500 text-xs mt-0.5">Estadísticas acumuladas de cajas cerradas</p>
+              </div>
+            </div>
+            <div className="bg-[#111] border border-[#2a2a2a] rounded-xl p-1 flex gap-1 self-start sm:self-auto">
+              <button
+                onClick={() => setHistoryGroupBy("week")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  historyGroupBy === "week"
+                    ? "bg-[#6B21A8] text-white shadow-lg shadow-purple-900/30"
+                    : "text-gray-400 hover:text-white"
+                }`}
+              >
+                <Calendar size={14} />
+                Por Semana
+              </button>
+              <button
+                onClick={() => setHistoryGroupBy("month")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  historyGroupBy === "month"
+                    ? "bg-[#6B21A8] text-white shadow-lg shadow-purple-900/30"
+                    : "text-gray-400 hover:text-white"
+                }`}
+              >
+                <Calendar size={14} />
+                Por Mes
+              </button>
+            </div>
+          </div>
+
+          {/* Tabla con header fijo y body scrolleable */}
+          {historyLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="w-6 h-6 border-2 border-[#8B5CF6] border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : historyData.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <TableProperties className="text-gray-600 mb-3" size={36} />
+              <p className="text-gray-500 text-sm">No hay cajas cerradas para mostrar</p>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-[#2a2a2a] overflow-hidden">
+              {/* Header fijo */}
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a]">
+                    <th className="text-left text-gray-500 uppercase text-xs tracking-wider font-semibold px-4 py-3 bg-[#111]">
+                      {historyGroupBy === "week" ? "Semana" : "Mes"}
+                    </th>
+                    <th className="text-right text-gray-500 uppercase text-xs tracking-wider font-semibold px-4 py-3 bg-[#111]">Ingresos</th>
+                    <th className="text-right text-gray-500 uppercase text-xs tracking-wider font-semibold px-4 py-3 bg-[#111] hidden md:table-cell">Efectivo</th>
+                    <th className="text-right text-gray-500 uppercase text-xs tracking-wider font-semibold px-4 py-3 bg-[#111] hidden md:table-cell">Virtual</th>
+                    <th className="text-right text-gray-500 uppercase text-xs tracking-wider font-semibold px-4 py-3 bg-[#111] hidden lg:table-cell">Gastos</th>
+                    <th className="text-right text-gray-500 uppercase text-xs tracking-wider font-semibold px-4 py-3 bg-[#111] hidden lg:table-cell">Cajas</th>
+                    <th className="text-right text-gray-500 uppercase text-xs tracking-wider font-semibold px-4 py-3 bg-[#111]">Balance</th>
+                  </tr>
+                </thead>
+              </table>
+              {/* Body con scroll vertical */}
+              <div className="overflow-y-auto max-h-[400px] custom-scrollbar">
+                <table className="w-full text-sm">
+                  <tbody>
+                    {historyData.map((row, idx) => {
+                      const isPositive = row.balanceNeto >= 0;
+                      return (
+                        <tr
+                          key={row.key}
+                          className={`border-b border-[#2a2a2a] transition-colors hover:bg-[#222] ${
+                            idx === historyData.length - 1 ? "border-b-0" : ""
+                          }`}
+                        >
+                          <td className="px-4 py-3.5">
+                            <div className="flex items-center gap-2">
+                              <div className="w-1.5 h-1.5 rounded-full bg-[#8B5CF6] shrink-0" />
+                              <span className="text-gray-200 font-medium capitalize">{row.label}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3.5 text-right">
+                            <span className="text-green-400 font-semibold">
+                              ${row.ingresos.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3.5 text-right hidden md:table-cell">
+                            <span className="text-gray-300">
+                              ${row.efectivo.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3.5 text-right hidden md:table-cell">
+                            <span className="text-blue-400">
+                              ${row.virtual.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3.5 text-right hidden lg:table-cell">
+                            <span className="text-red-400">
+                              {row.gastosOperativos > 0 ? "-" : ""}${row.gastosOperativos.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3.5 text-right hidden lg:table-cell">
+                            <span className="text-gray-400 bg-[#2a2a2a] px-2 py-0.5 rounded-full text-xs font-medium">
+                              {row.cajasCount} {row.cajasCount === 1 ? "caja" : "cajas"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3.5 text-right">
+                            <span
+                              className={`inline-flex items-center gap-1 font-bold px-2.5 py-1 rounded-lg text-xs ${
+                                isPositive
+                                  ? "text-green-400 bg-green-500/10"
+                                  : "text-red-400 bg-red-500/10"
+                              }`}
+                            >
+                              {isPositive ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+                              {isPositive ? "+" : "-"}${Math.abs(row.balanceNeto).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
