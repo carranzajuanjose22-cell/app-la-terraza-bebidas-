@@ -67,12 +67,16 @@ export async function closeRegister(registerId) {
   if (!register) throw new Error("Caja no encontrada");
   if (register.status === "closed") throw new Error("La caja ya está cerrada");
 
-  const totals = await computeRegisterTotals(registerId);
+  const { hasOpenTableAccounts, listOpenTablesSummary } = await import("./tableService.js");
+  if (await hasOpenTableAccounts()) {
+    const open = await listOpenTablesSummary();
+    const names = open.map((t) => t.name || `Mesa ${t.number}`).join(", ");
+    throw new Error(
+      `No se puede cerrar la caja: hay mesas con cuenta abierta (${names}). Cobrálas o liberálas antes.`
+    );
+  }
 
-  // Los gastos diarios / extracciones NO se restan del totalEfectivo.
-  // Se almacenan en la tabla dailyExpenses con cashRegisterId y se consultan
-  // por separado en getRegisterWithItems para mostrar el detalle.
-  // Restar gastos aquí producía valores negativos erróneos.
+  const totals = await computeRegisterTotals(registerId);
 
   const [closed] = await db
     .update(cashRegisters)

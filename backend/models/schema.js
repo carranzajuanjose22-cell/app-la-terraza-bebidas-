@@ -32,7 +32,10 @@ export const categories = sqliteTable("categories", {
 export const products = sqliteTable("products", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
+  // price se mantiene = priceMostrador por compatibilidad (stats/UI legacy)
   price: real("price").notNull(),
+  priceMesa: real("price_mesa").notNull().default(0),
+  priceMostrador: real("price_mostrador").notNull().default(0),
   cost: real("cost").notNull().default(0),
   category: text("category").notNull().default("General"),
   stock: integer("stock").notNull().default(0),
@@ -46,6 +49,26 @@ export const products = sqliteTable("products", {
   bottleProductId: integer("bottle_product_id").references(() => products.id, { onDelete: "set null" }),
   glassesPerBottle: integer("glasses_per_bottle"),
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+  updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
+});
+
+// ─────────────────────────────────────────
+// MESAS (catálogo físico del local)
+// ─────────────────────────────────────────
+export const tables = sqliteTable("tables", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  number: integer("number").notNull().unique(),
+  name: text("name").notNull().default(""),
+  status: text("status", { enum: ["libre", "ocupada", "cerrando"] }).notNull().default("libre"),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+});
+
+// Cuenta abierta de mesa (persiste entre sesiones hasta cobrar)
+export const openTableAccounts = sqliteTable("open_table_accounts", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  tableNumber: integer("table_number").notNull().unique(),
+  itemsJson: text("items_json").notNull().default("[]"),
   updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
 });
 
@@ -96,6 +119,11 @@ export const transactions = sqliteTable("transactions", {
   cashRegisterId: integer("cash_register_id").references(() => cashRegisters.id),
   userId: integer("user_id").notNull().references(() => users.id),
   total: real("total").notNull(),
+  // mostrador | mesa
+  saleType: text("sale_type", { enum: ["mostrador", "mesa"] }).notNull().default("mostrador"),
+  // Snapshot del número de mesa (NO es FK a tables.id)
+  tableNumber: integer("table_number"),
+  code: text("code"),
   date: text("date").notNull(),
   time: text("time").notNull(),
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),

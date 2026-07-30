@@ -14,6 +14,7 @@ import transactionRoutes from "./routes/transactionRoutes.js";
 import dailyExpenseRoutes from "./routes/dailyExpenseRoutes.js";
 import barBottleRoutes from "./routes/barBottleRoutes.js";
 import internalWithdrawalRoutes from "./routes/internalWithdrawalRoutes.js";
+import tableRoutes from "./routes/tableRoutes.js";
 import { db } from "./db/index.js";
 import { transactionItems, products, barBottles, cashRegisters, dailyExpenses, internalWithdrawals, stockModifications, transactions, fixedExpenses } from "./models/schema.js";
 import { and, eq, gte, isNull, lt } from "drizzle-orm";
@@ -63,6 +64,7 @@ app.use("/api/transactions", transactionRoutes);
 app.use("/api/daily-expenses", dailyExpenseRoutes);
 app.use("/api/bar-bottles", barBottleRoutes);
 app.use("/api/internal-withdrawals", internalWithdrawalRoutes);
+app.use("/api/tables", tableRoutes);
 
 app.get("/api/stats/restock", async (req, res) => {
   try {

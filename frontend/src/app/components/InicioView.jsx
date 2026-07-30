@@ -44,6 +44,9 @@ export function InicioView({ isCajaOpen, onOpenCaja, onCloseCaja, transactions }
     id: t.id,
     time: t.time,
     total: t.total,
+    code: t.code,
+    saleType: t.saleType || "mostrador",
+    tableNumber: t.tableNumber,
     items: t.items?.reduce((sum, i) => sum + i.quantity, 0) || 0,
     details: t.items?.map((i) => `${i.quantity}x ${i.name}`) || [],
   }));
@@ -256,7 +259,14 @@ export function InicioView({ isCajaOpen, onOpenCaja, onCloseCaja, transactions }
                       <div className="flex items-center gap-4">
                         <div className="w-10 h-10 rounded-full bg-[#333] flex items-center justify-center text-gray-400 text-xs">#{sale.id}</div>
                         <div>
-                          <p className="text-white font-medium">Venta en salón</p>
+                          <p className="text-white font-medium">
+                            {sale.saleType === "mesa"
+                              ? `Mesa ${sale.tableNumber ?? "?"}`
+                              : "Mostrador"}
+                            {sale.code ? (
+                              <span className="text-gray-500 text-xs font-normal ml-2">{sale.code}</span>
+                            ) : null}
+                          </p>
                           <p className="text-gray-500 text-sm">{sale.time} • {sale.items} productos</p>
                         </div>
                       </div>

@@ -2,7 +2,7 @@ import { Plus, ShoppingCart, Wine, Beer, Droplets, Layers, Package } from "lucid
 
 const ICON_MAP = { Wine, Beer, Droplets, Layers, Package };
 
-export function ProductCard({ product, onAddToCart, availableGlasses = null }) {
+export function ProductCard({ product, onAddToCart, availableGlasses = null, displayPrice, priceLabel }) {
   const Icon = ICON_MAP[product.icon] || Package;
   const isDrinkGlass = !!product.bottleProductId
     || (Array.isArray(product.drinkBottleItems) && product.drinkBottleItems.length > 0);
@@ -10,6 +10,7 @@ export function ProductCard({ product, onAddToCart, availableGlasses = null }) {
   const noBottleOpen = isDrinkGlass && availableGlasses !== null && availableGlasses <= 0;
   const bottleCount = product.drinkBottleItems?.length
     || (product.bottleProductId ? 1 : 0);
+  const price = displayPrice != null ? displayPrice : product.price;
 
   return (
     <div className={`bg-[#1e1e1e] border rounded-xl p-3 md:p-4 flex items-center justify-between transition-colors duration-300 ${
@@ -49,7 +50,12 @@ export function ProductCard({ product, onAddToCart, availableGlasses = null }) {
         </div>
       </div>
       <div className="flex items-center gap-3 md:gap-6 ml-2 shrink-0">
-        <span className="text-[#8B5CF6] font-bold text-base md:text-xl">${Number(product.price).toFixed(2)}</span>
+        <div className="text-right">
+          {priceLabel && (
+            <span className="block text-[10px] text-gray-500 uppercase tracking-wide">{priceLabel}</span>
+          )}
+          <span className="text-[#8B5CF6] font-bold text-base md:text-xl">${Number(price).toFixed(2)}</span>
+        </div>
         <button
           onClick={() => onAddToCart(product)}
           className="bg-[#6B21A8] hover:bg-[#581C87] text-white px-3 md:px-4 h-9 md:h-10 rounded-lg flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 shadow-md shadow-[#6B21A8]/20"

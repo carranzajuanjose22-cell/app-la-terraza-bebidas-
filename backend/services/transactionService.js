@@ -2,6 +2,7 @@ import { and, asc, eq, desc, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { transactions, transactionItems, transactionPayments, products, promotionItems, barBottles } from "../models/schema.js";
 import { recalcPromotionsForProduct, getDrinkRecipe } from "./productService.js";
+import { setStatusByNumber, clearOpenAccount } from "./tableService.js";
 import { getBusinessDateKey, getBusinessTimeKey } from "../utils/businessDate.js";
 
 async function getAvailableGlassesForBottle(bottleProductId, glassesPerBottle) {
@@ -96,6 +97,15 @@ export async function getTransactionsByRegister(cashRegisterId) {
 }
 
 export async function createTransaction(data, userId, cashRegisterId) {
+  const saleType = data.saleType === "mesa" ? "mesa" : "mostrador";
+  const tableNumber = saleType === "mesa" ? Number(data.tableNumber) : null;
+
+  if (saleType === "mesa") {
+    if (!tableNumber || Number.isNaN(tableNumber) || tableNumber < 1) {
+      throw new Error("Número de mesa requerido para ventas de mesa");
+    }
+  }
+
   if (data.items && data.items.length > 0) {
     for (const item of data.items) {
       if (!item.productId) continue;
@@ -131,10 +141,21 @@ export async function createTransaction(data, userId, cashRegisterId) {
   const now = new Date();
   const date = getBusinessDateKey(now);
   const time = getBusinessTimeKey(now);
+  const ts = Date.now();
+  const code = data.code || (saleType === "mesa" ? `MESA${ts}` : `MOST${ts}`);
 
   const [tx] = await db
     .insert(transactions)
-    .values({ userId, cashRegisterId, total: data.total, date, time })
+    .values({
+      userId,
+      cashRegisterId,
+      total: data.total,
+      saleType,
+      tableNumber: saleType === "mesa" ? tableNumber : null,
+      code,
+      date,
+      time,
+    })
     .returning();
 
   if (data.items && data.items.length > 0) {
@@ -196,6 +217,17 @@ export async function createTransaction(data, userId, cashRegisterId) {
         surchargePercent: p.surchargePercent ?? 0,
       }))
     );
+  }
+
+  // Liberar mesa física y borrar cuenta abierta al cobrar
+  if (saleType === "mesa" && tableNumber) {
+    try {
+      await clearOpenAccount(tableNumber);
+    } catch {
+      try {
+        await setStatusByNumber(tableNumber, "libre");
+      } catch { /* ignore */ }
+    }
   }
 
   const items = await db.select().from(transactionItems).where(eq(transactionItems.transactionId, tx.id));

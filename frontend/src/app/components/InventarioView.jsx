@@ -14,7 +14,8 @@ const ICON_OPTIONS = [
 
 const EMPTY_PRODUCT = {
   name: "",
-  price: "",
+  priceMesa: "",
+  priceMostrador: "",
   cost: "",
   category: "Vinos",
   stock: "",
@@ -24,7 +25,7 @@ const EMPTY_PRODUCT = {
   drinkBottleItems: [],
 };
 
-const EMPTY_PROMO = { name: "", cost: "", price: "", stock: "", minStock: "", items: [] };
+const EMPTY_PROMO = { name: "", cost: "", priceMesa: "", priceMostrador: "", stock: "", minStock: "", items: [] };
 
 export function InventarioView() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -94,7 +95,8 @@ export function InventarioView() {
       isNew: false,
       item: {
         ...product,
-        price: String(product.price),
+        priceMesa: String(product.priceMesa ?? product.price ?? ""),
+        priceMostrador: String(product.priceMostrador ?? product.price ?? ""),
         cost: String(product.cost ?? ""),
         stock: String(product.stock),
         minStock: String(product.minStock),
@@ -157,11 +159,22 @@ export function InventarioView() {
       }
     }
     if (submitting) return;
+    const priceMesa = parseFloat(productModal.item.priceMesa);
+    const priceMostrador = parseFloat(productModal.item.priceMostrador);
+    if (Number.isNaN(priceMesa) || priceMesa < 0) {
+      toast.error("El precio de mesa es obligatorio (≥ 0)");
+      return;
+    }
+    if (Number.isNaN(priceMostrador) || priceMostrador < 0) {
+      toast.error("El precio de mostrador es obligatorio (≥ 0)");
+      return;
+    }
     setSubmitting(true);
     try {
       const payload = {
         name: productModal.item.name,
-        price: parseFloat(productModal.item.price) || 0,
+        priceMesa,
+        priceMostrador,
         cost: parseFloat(productModal.item.cost) || 0,
         category: productModal.item.category,
         icon: productModal.item.icon || "Package",
@@ -243,7 +256,8 @@ export function InventarioView() {
     setPromoForm({
       name: product.name,
       cost: String(product.cost ?? ""),
-      price: String(product.price ?? ""),
+      priceMesa: String(product.priceMesa ?? product.price ?? ""),
+      priceMostrador: String(product.priceMostrador ?? product.price ?? ""),
       minStock: String(product.minStock ?? ""),
       items: null, // null = cargando
     });
@@ -305,6 +319,16 @@ export function InventarioView() {
     if (!promoForm.name.trim()) { toast.error("El nombre de la promoción es obligatorio"); return; }
     if (promoForm.items === null) { toast.error("Los productos aún están cargando, esperá un momento"); return; }
     if (promoForm.items.length === 0) { toast.error("Agregá al menos un producto a la promoción"); return; }
+    const priceMesa = parseFloat(promoForm.priceMesa);
+    const priceMostrador = parseFloat(promoForm.priceMostrador);
+    if (Number.isNaN(priceMesa) || priceMesa < 0) {
+      toast.error("El precio de mesa es obligatorio (≥ 0)");
+      return;
+    }
+    if (Number.isNaN(priceMostrador) || priceMostrador < 0) {
+      toast.error("El precio de mostrador es obligatorio (≥ 0)");
+      return;
+    }
     if (submittingPromo) return;
     setSubmittingPromo(true);
     try {
@@ -314,7 +338,8 @@ export function InventarioView() {
         icon: "Layers",
         isPromotion: true,
         cost: parseFloat(promoForm.cost) || 0,
-        price: parseFloat(promoForm.price) || 0,
+        priceMesa,
+        priceMostrador,
         stock: calcPromoStock,
         minStock: parseInt(promoForm.minStock, 10) || 0,
         promotionItems: promoItems.map((i) => ({ productId: i.productId, quantity: i.quantity })),
@@ -405,13 +430,14 @@ export function InventarioView() {
 
       <div className="bg-[#1a1a1a] rounded-xl overflow-hidden border border-[#2a2a2a]">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1050px]">
+          <table className="w-full min-w-[1150px]">
             <thead>
               <tr className="border-b border-[#2a2a2a]">
                 <th className="text-left text-gray-400 p-4">Producto</th>
                 <th className="text-left text-gray-400 p-4">Categoría</th>
                 <th className="text-left text-gray-400 p-4">Costo</th>
-                <th className="text-left text-gray-400 p-4">Precio</th>
+                <th className="text-left text-gray-400 p-4">P. Mesa</th>
+                <th className="text-left text-gray-400 p-4">P. Mostrador</th>
                 <th className="text-left text-gray-400 p-4">Stock</th>
                 <th className="text-left text-gray-400 p-4">Min. Stock</th>
                 <th className="text-left text-gray-400 p-4">Estado</th>
@@ -447,7 +473,8 @@ export function InventarioView() {
                     </td>
                     <td className="p-4"><span className="text-gray-400">{product.category}</span></td>
                     <td className="p-4"><span className="text-gray-400">${Number(product.cost || 0).toFixed(2)}</span></td>
-                    <td className="p-4"><span className="text-white">${Number(product.price).toFixed(2)}</span></td>
+                    <td className="p-4"><span className="text-white">${Number(product.priceMesa ?? product.price).toFixed(2)}</span></td>
+                    <td className="p-4"><span className="text-white">${Number(product.priceMostrador ?? product.price).toFixed(2)}</span></td>
                     <td className="p-4">
                       <span className="text-white">
                         {isDrinkGlass ? "Desde barra" : `${product.stock} unidades`}
@@ -728,33 +755,63 @@ export function InventarioView() {
                       </div>
                       <p className="text-gray-500 text-xs mt-1">Suma del costo proporcional de cada botella</p>
                     </div>
-                    <div>
-                      <label className="text-gray-400 text-sm block mb-2">Precio ($)</label>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={productModal.item.price}
-                        onChange={(e) => {
-                          const val = e.target.value.replace(/[^0-9.]/g, "").replace(/^0+(?=\d)/, "");
-                          setProductModal((prev) => ({ ...prev, item: { ...prev.item, price: val } }));
-                        }}
-                        onFocus={(e) => e.target.select()}
-                        placeholder="0"
-                        className="w-full bg-[#2a2a2a] text-white rounded-xl px-4 py-3 border border-[#333] focus:border-[#6B21A8] outline-none"
-                      />
-                    </div>
+                    <div />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    {[
+                      { label: "Precio mesa ($)", field: "priceMesa" },
+                      { label: "Precio mostrador ($)", field: "priceMostrador" },
+                    ].map(({ label, field }) => (
+                      <div key={field}>
+                        <label className="text-gray-400 text-sm block mb-2">{label}</label>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={productModal.item[field] ?? ""}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/[^0-9.]/g, "").replace(/^0+(?=\d)/, "");
+                            setProductModal((prev) => ({ ...prev, item: { ...prev.item, [field]: val } }));
+                          }}
+                          onFocus={(e) => e.target.select()}
+                          placeholder="0"
+                          className="w-full bg-[#2a2a2a] text-white rounded-xl px-4 py-3 border border-[#333] focus:border-[#6B21A8] outline-none"
+                        />
+                      </div>
+                    ))}
                   </div>
                 </>
               ) : (
                 <>
                   <div className="grid grid-cols-2 gap-4">
-                  {[{ label: "Costo ($)", field: "cost" }, { label: "Precio ($)", field: "price" }].map(({ label, field }) => (
+                  {[{ label: "Costo ($)", field: "cost" }].map(({ label, field }) => (
                     <div key={field}>
                       <label className="text-gray-400 text-sm block mb-2">{label}</label>
                       <input
                         type="text"
                         inputMode="decimal"
                         value={productModal.item[field]}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/[^0-9.]/g, "").replace(/^0+(?=\d)/, "");
+                          setProductModal((prev) => ({ ...prev, item: { ...prev.item, [field]: val } }));
+                        }}
+                        onFocus={(e) => e.target.select()}
+                        placeholder="0"
+                        className="w-full bg-[#2a2a2a] text-white rounded-xl px-4 py-3 border border-[#333] focus:border-[#6B21A8] outline-none"
+                      />
+                    </div>
+                  ))}
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                  {[
+                    { label: "Precio mesa ($)", field: "priceMesa" },
+                    { label: "Precio mostrador ($)", field: "priceMostrador" },
+                  ].map(({ label, field }) => (
+                    <div key={field}>
+                      <label className="text-gray-400 text-sm block mb-2">{label}</label>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={productModal.item[field] ?? ""}
                         onChange={(e) => {
                           const val = e.target.value.replace(/[^0-9.]/g, "").replace(/^0+(?=\d)/, "");
                           setProductModal((prev) => ({ ...prev, item: { ...prev.item, [field]: val } }));
@@ -945,7 +1002,7 @@ export function InventarioView() {
                 )}
               </div>
 
-              {/* Costo y Precio */}
+              {/* Costo y Precios duales */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-gray-400 text-sm block mb-2">Costo UNITARIO ($)</label>
@@ -959,14 +1016,29 @@ export function InventarioView() {
                     className="w-full bg-[#2a2a2a] text-white rounded-xl px-4 py-3 border border-[#333] focus:border-blue-500 outline-none"
                   />
                 </div>
+                <div />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-gray-400 text-sm block mb-2">Precio ($)</label>
+                  <label className="text-gray-400 text-sm block mb-2">Precio mesa ($)</label>
                   <input
                     type="text"
                     inputMode="decimal"
                     placeholder="0"
-                    value={promoForm.price}
-                    onChange={(e) => setPromoForm((p) => ({ ...p, price: e.target.value.replace(/[^0-9.]/g, "").replace(/^0+(?=\d)/, "") }))}
+                    value={promoForm.priceMesa}
+                    onChange={(e) => setPromoForm((p) => ({ ...p, priceMesa: e.target.value.replace(/[^0-9.]/g, "").replace(/^0+(?=\d)/, "") }))}
+                    onFocus={(e) => e.target.select()}
+                    className="w-full bg-[#2a2a2a] text-white rounded-xl px-4 py-3 border border-[#333] focus:border-blue-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-gray-400 text-sm block mb-2">Precio mostrador ($)</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0"
+                    value={promoForm.priceMostrador}
+                    onChange={(e) => setPromoForm((p) => ({ ...p, priceMostrador: e.target.value.replace(/[^0-9.]/g, "").replace(/^0+(?=\d)/, "") }))}
                     onFocus={(e) => e.target.select()}
                     className="w-full bg-[#2a2a2a] text-white rounded-xl px-4 py-3 border border-[#333] focus:border-blue-500 outline-none"
                   />

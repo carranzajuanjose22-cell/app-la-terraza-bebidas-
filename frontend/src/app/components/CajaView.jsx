@@ -257,6 +257,7 @@ export function CajaView({ role = "admin", isCajaOpen, register, onOpenCaja, onC
               <thead>
                 <tr className="border-b border-[#2a2a2a]">
                   <th className="text-left text-gray-400 p-4">Hora</th>
+                  <th className="text-left text-gray-400 p-4">Tipo</th>
                   <th className="text-left text-gray-400 p-4">Método de Pago</th>
                   <th className="text-right text-gray-400 p-4">Total</th>
                   <th className="text-right text-gray-400 p-4">Acciones</th>
@@ -268,6 +269,16 @@ export function CajaView({ role = "admin", isCajaOpen, register, onOpenCaja, onC
                     <Fragment key={t.id}>
                       <tr className={`border-b border-[#2a2a2a] hover:bg-[#2a2a2a] transition-colors ${expandedId === t.id ? "bg-[#2a2a2a]" : ""}`}>
                         <td className="p-4"><div className="flex items-center gap-2 text-white"><Clock size={16} className="text-gray-400" />{t.time}</div></td>
+                        <td className="p-4">
+                          <span className={`px-2.5 py-1 rounded-full text-xs ${
+                            t.saleType === "mesa"
+                              ? "bg-amber-500/20 text-amber-300"
+                              : "bg-[#2a2a2a] text-gray-300"
+                          }`}>
+                            {t.saleType === "mesa" ? `Mesa ${t.tableNumber ?? "?"}` : "Mostrador"}
+                          </span>
+                          {t.code && <span className="block text-[10px] text-gray-500 mt-1">{t.code}</span>}
+                        </td>
                         <td className="p-4">
                           <div className="flex gap-2 flex-wrap">
                             {t.payments.map((payment, idx) => {
@@ -291,7 +302,7 @@ export function CajaView({ role = "admin", isCajaOpen, register, onOpenCaja, onC
                       </tr>
                       {expandedId === t.id && t.items && (
                         <tr className="border-b border-[#2a2a2a] bg-[#121212]">
-                          <td colSpan={4} className="p-6">
+                          <td colSpan={5} className="p-6">
                             <div className="bg-[#1a1a1a] rounded-lg border border-[#2a2a2a] overflow-hidden">
                               <table className="w-full text-sm">
                                 <thead className="bg-[#2a2a2a]"><tr><th className="text-left text-gray-400 p-3">Producto</th><th className="text-center text-gray-400 p-3">Cant.</th><th className="text-right text-gray-400 p-3">Total</th></tr></thead>

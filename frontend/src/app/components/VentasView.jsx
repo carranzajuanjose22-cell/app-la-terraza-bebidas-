@@ -8,6 +8,10 @@ import { Loader } from "./Loader.jsx";
 import { toast } from "sonner";
 import api from "../../services/api.js";
 
+function unitPriceMostrador(product) {
+  return Number(product.priceMostrador ?? product.price) || 0;
+}
+
 export function VentasView({ isCajaOpen, onAddTransaction }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("Todos");
@@ -66,7 +70,6 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
     return [];
   };
 
-  // Capacidad restante en barra para un tipo de botella.
   const getAvailableGlasses = (bottleProductId, glassesPerBottle) => {
     if (!bottleProductId || !glassesPerBottle || glassesPerBottle <= 0) return 0;
     return barBottles
@@ -74,7 +77,6 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
       .reduce((acc, b) => acc + Math.max(0, glassesPerBottle - (Number(b.servedGlasses) || 0)), 0);
   };
 
-  // Porciones ya reservadas en el carrito para una botella (suma glassesUsed * qty).
   const getCartReservedPortions = (bottleProductId, excludeProductId = null) => {
     return cartItems.reduce((sum, item) => {
       if (excludeProductId != null && item.id === excludeProductId) return sum;
@@ -85,7 +87,6 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
     }, 0);
   };
 
-  // Máximo de unidades del trago que se pueden agregar ahora (limitado por la botella más escasa).
   const getMaxDrinkUnitsAvailable = (product, excludeSelfFromCart = false) => {
     const recipe = getDrinkRecipe(product);
     if (recipe.length === 0) return 0;
@@ -114,25 +115,20 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
     const currentQty = existing ? existing.quantity : 0;
     const recipe = getDrinkRecipe(product);
     const isDrinkGlass = recipe.length > 0;
+    const price = unitPriceMostrador(product);
 
-    // Receta inválida (trago a medias): no permitir venta
     if (isDrinkGlass && recipe.some((ing) => !ing.bottleProductId || ing.glassesPerBottle <= 0 || ing.glassesUsed <= 0)) {
-      toast.error("Trago mal configurado", {
-        description: "Editá el producto en Inventario y completá botella, uso por trago y rendimiento.",
-      });
+      toast.error("Trago mal configurado");
       return;
     }
 
-    // Refrescar botellas abiertas antes de validar un trago (evita datos viejos en memoria)
     let bottlesSnapshot = barBottles;
     if (isDrinkGlass) {
       try {
         const { data } = await api.get("/bar-bottles");
         bottlesSnapshot = data || [];
         setBarBottles(bottlesSnapshot);
-      } catch {
-        // si falla, usamos el snapshot en memoria
-      }
+      } catch { /* keep */ }
     }
 
     const availableFromSnapshot = (bottleProductId, glassesPerBottle) => {
@@ -144,38 +140,21 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
 
     if (isDrinkGlass) {
       let maxUnits = Infinity;
-      let missingIng = null;
       for (const ing of recipe) {
         const available = availableFromSnapshot(ing.bottleProductId, ing.glassesPerBottle);
         const reserved = getCartReservedPortions(ing.bottleProductId, product.id);
         const free = Math.max(0, available - reserved);
-        const units = Math.floor(free / ing.glassesUsed);
-        if (units < maxUnits) {
-          maxUnits = units;
-          if (free < ing.glassesUsed * (currentQty + 1)) missingIng = ing;
-        }
+        maxUnits = Math.min(maxUnits, Math.floor(free / ing.glassesUsed));
       }
       if (maxUnits === Infinity) maxUnits = 0;
-
       if (maxUnits < currentQty + 1) {
-        const bottleName = missingIng
-          ? (products.find((p) => Number(p.id) === Number(missingIng.bottleProductId))?.name || "una botella")
-          : "las botellas";
-        toast.error("Sin botella abierta en la barra", {
-          description: maxUnits <= 0 && currentQty === 0
-            ? `Abrí en Inicio → En Barra: ${bottleName}.`
-            : `Capacidad insuficiente de ${bottleName} para otro vaso.`,
-        });
+        toast.error("Sin botella abierta en la barra");
         return;
       }
     } else {
       const stock = Number(product.stock) || 0;
       if (currentQty >= stock) {
-        toast.error("Sin stock suficiente", {
-          description: stock <= 0
-            ? `No hay stock de ${product.name}`
-            : `Solo hay ${stock} unidad${stock === 1 ? "" : "es"} de ${product.name}`,
-        });
+        toast.error("Sin stock suficiente");
         return;
       }
     }
@@ -186,7 +165,7 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
       setCartItems((prev) => [...prev, {
         id: product.id,
         name: product.name,
-        price: product.price,
+        price,
         stock: product.stock,
         quantity: 1,
         bottleProductId: product.bottleProductId || null,
@@ -201,18 +180,15 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
     if (quantity <= 0) { handleRemoveItem(id); return; }
     const item = cartItems.find((i) => i.id === id);
     if (!item) return;
-
     const recipe = getDrinkRecipe(item);
     if (recipe.length > 0) {
       const maxUnits = getMaxDrinkUnitsAvailable(item, true);
       if (quantity > maxUnits) {
-        toast.error("Sin botellas abiertas suficientes", {
-          description: `Solo podés cargar hasta ${maxUnits} de este trago con las botellas abiertas.`,
-        });
+        toast.error("Sin botellas abiertas suficientes");
         return;
       }
     } else if (quantity > item.stock) {
-      toast.error("Sin stock suficiente", { description: `Solo hay ${item.stock} unidad${item.stock === 1 ? "" : "es"} de ${item.name}` });
+      toast.error("Sin stock suficiente");
       return;
     }
     setCartItems((prev) => prev.map((i) => i.id === id ? { ...i, quantity } : i));
@@ -227,6 +203,8 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
     const finalTotal = payments.reduce((sum, p) => sum + p.finalAmount, 0);
     const transaction = {
       total: finalTotal,
+      saleType: "mostrador",
+      tableNumber: null,
       payments: payments.map((p) => ({
         type: p.type,
         amount: p.finalAmount,
@@ -257,11 +235,6 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
   const total = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const totalCartItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
 
-  const handleOpenCheckout = () => {
-    setShowMobileCart(false);
-    setShowPaymentModal(true);
-  };
-
   const handleDailyExpense = async (expenseData) => {
     try {
       await api.post("/daily-expenses", expenseData);
@@ -288,11 +261,13 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
         </div>
       )}
 
-      {/* Área principal de productos */}
       <div className="flex-1 p-4 pb-24 md:p-8 md:pb-8 overflow-y-auto">
         <div className="mb-6 md:mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 md:mb-6 gap-3">
-            <h1 className="text-white text-2xl md:text-4xl">Punto de Venta</h1>
+            <div>
+              <h1 className="text-white text-2xl md:text-4xl">Mostrador</h1>
+              <p className="text-gray-400 text-sm mt-1">Venta rápida · precio mostrador</p>
+            </div>
             {isCajaOpen && (
               <button
                 onClick={() => setShowExpenseModal(true)}
@@ -315,7 +290,6 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
             />
           </div>
 
-          {/* Filtro de categorías — scroll horizontal en móvil */}
           <div className="flex gap-2 md:gap-3 overflow-x-auto pb-2 md:pb-0 md:flex-wrap scrollbar-hide">
             {allCategories.map((category) => (
               <button
@@ -339,20 +313,19 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
             const recipe = getDrinkRecipe(product);
             const isDrink = recipe.length > 0;
             return (
-            <ProductCard
-              key={product.id}
-              product={product}
-              onAddToCart={handleAddToCart}
-              availableGlasses={
-                isDrink ? getMaxDrinkUnitsAvailable(product, true) : null
-              }
-            />
+              <ProductCard
+                key={product.id}
+                product={product}
+                displayPrice={unitPriceMostrador(product)}
+                priceLabel="Mostrador"
+                onAddToCart={handleAddToCart}
+                availableGlasses={isDrink ? getMaxDrinkUnitsAvailable(product, true) : null}
+              />
             );
           })}
         </div>
       </div>
 
-      {/* Botón flotante del carrito — solo móvil */}
       <div className="fixed bottom-20 right-4 md:hidden z-30">
         <button
           onClick={() => setShowMobileCart(true)}
@@ -372,7 +345,7 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
         items={cartItems}
         onUpdateQuantity={handleUpdateQuantity}
         onRemoveItem={handleRemoveItem}
-        onCheckout={handleOpenCheckout}
+        onCheckout={() => { setShowMobileCart(false); setShowPaymentModal(true); }}
         isMobileOpen={showMobileCart}
         onMobileClose={() => setShowMobileCart(false)}
       />
@@ -389,7 +362,6 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-[#1a1a1a] rounded-2xl w-full max-w-md border border-[#2a2a2a] p-8 text-center">
             <p className="text-white text-xl mb-4">No hay métodos de pago configurados</p>
-            <p className="text-gray-400 mb-6">Configurá al menos un método de pago en la sección Configuración.</p>
             <button onClick={() => setShowPaymentModal(false)} className="bg-[#6B21A8] text-white px-6 py-3 rounded-xl">Cerrar</button>
           </div>
         </div>

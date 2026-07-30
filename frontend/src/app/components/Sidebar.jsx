@@ -1,9 +1,10 @@
-import { ShoppingCart, Package, DollarSign, Settings, LogOut, Home, BarChart3, Users } from "lucide-react";
+import { ShoppingCart, Package, DollarSign, Settings, LogOut, Home, BarChart3, Users, Armchair } from "lucide-react";
 
 export function Sidebar({ activeView, onViewChange, role, onLogout }) {
   const menuItems = [
     { id: "inicio", icon: Home, label: "Inicio", roles: ["admin"] },
     { id: "ventas", icon: ShoppingCart, label: "Ventas", roles: ["admin", "cajero"] },
+    { id: "mesas", icon: Armchair, label: "Mesas", roles: ["admin", "cajero"] },
     { id: "inventario", icon: Package, label: "Stock", roles: ["admin"] },
     { id: "caja", icon: DollarSign, label: "Caja", roles: ["admin", "cajero"] },
     { id: "estadisticas", icon: BarChart3, label: "Stats", roles: ["admin"] },

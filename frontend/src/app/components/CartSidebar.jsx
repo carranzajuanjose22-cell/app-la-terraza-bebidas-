@@ -1,6 +1,15 @@
 import { Plus, Minus, Trash2, CreditCard, X } from "lucide-react";
 
-export function CartSidebar({ items, onUpdateQuantity, onRemoveItem, onCheckout, isMobileOpen, onMobileClose }) {
+export function CartSidebar({
+  items,
+  onUpdateQuantity,
+  onRemoveItem,
+  onCheckout,
+  isMobileOpen,
+  onMobileClose,
+  title = "Carrito",
+  checkoutLabel = "Finalizar Venta",
+}) {
   const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
 
@@ -66,7 +75,7 @@ export function CartSidebar({ items, onUpdateQuantity, onRemoveItem, onCheckout,
         className="w-full bg-[#6B21A8] hover:bg-[#581C87] disabled:bg-[#333] disabled:text-gray-500 disabled:cursor-not-allowed text-white py-4 rounded-xl flex items-center justify-center gap-2 transition-all"
       >
         <CreditCard size={20} />
-        Finalizar Venta
+        {checkoutLabel}
       </button>
     </div>
   );
@@ -76,7 +85,7 @@ export function CartSidebar({ items, onUpdateQuantity, onRemoveItem, onCheckout,
       {/* Panel derecho — desktop */}
       <div className="hidden md:flex w-96 bg-[#1a1a1a] border-l border-[#2a2a2a] flex-col shrink-0">
         <div className="p-6 border-b border-[#2a2a2a]">
-          <h2 className="text-white text-2xl">Carrito</h2>
+          <h2 className="text-white text-2xl">{title}</h2>
           <p className="text-gray-400 text-sm mt-1">{itemCount} productos</p>
         </div>
         <ItemsList />
@@ -100,7 +109,7 @@ export function CartSidebar({ items, onUpdateQuantity, onRemoveItem, onCheckout,
             </div>
             <div className="flex items-center justify-between px-5 py-3 border-b border-[#2a2a2a]">
               <div>
-                <h2 className="text-white text-xl font-medium">Carrito</h2>
+                <h2 className="text-white text-xl font-medium">{title}</h2>
                 <p className="text-gray-400 text-xs mt-0.5">{itemCount} productos</p>
               </div>
               <button

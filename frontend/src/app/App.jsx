@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Toaster, toast } from "sonner";
 import { Sidebar } from "./components/Sidebar.jsx";
 import { VentasView } from "./components/VentasView.jsx";
+import { MesasView } from "./components/MesasView.jsx";
 import { InventarioView } from "./components/InventarioView.jsx";
 import { CajaView } from "./components/CajaView.jsx";
 import { LoginView } from "./components/LoginView.jsx";
@@ -50,9 +51,33 @@ export default function App() {
   // Transacciones de la caja actual (en memoria para velocidad, se persisten en el backend)
   const [transactions, setTransactions] = useState([]);
 
+  // Cuenta abierta de mesas (persistida en backend; sobrevive logout)
+  const [mesaSeleccionada, setMesaSeleccionada] = useState(null);
+  const [cargaMesas, setCargaMesas] = useState({});
+  const [tables, setTables] = useState([]);
+
+  async function fetchMesaAccounts() {
+    try {
+      const [tRes, aRes] = await Promise.all([
+        api.get("/tables"),
+        api.get("/tables/accounts"),
+      ]);
+      setTables(tRes.data || []);
+      const raw = aRes.data || {};
+      const map = {};
+      for (const [k, v] of Object.entries(raw)) {
+        map[Number(k)] = v;
+      }
+      setCargaMesas(map);
+    } catch {
+      // sin conexión
+    }
+  }
+
   useEffect(() => {
     if (user) {
       fetchCajaStatus(true);
+      fetchMesaAccounts();
     }
   }, [user]);
 
@@ -69,6 +94,9 @@ export default function App() {
           createdAt: t.createdAt,
           time: getTransactionDisplayTime(t),
           total: t.total,
+          saleType: t.saleType || "mostrador",
+          tableNumber: t.tableNumber ?? null,
+          code: t.code || null,
           payments: t.payments.map((p) => ({ type: p.methodName, amount: p.amount })),
           items: t.items.map((i) => ({ name: i.productName, quantity: i.quantity, total: i.total })),
         })));
@@ -90,10 +118,16 @@ export default function App() {
 
   async function handleCloseCaja() {
     if (!cajaStatus.register) return;
-    await api.post("/cash-register/close", { registerId: cajaStatus.register.id });
-    setCajaStatus({ isOpen: false, register: null });
-    setTransactions([]);
-    await fetchCajaStatus();
+    try {
+      await api.post("/cash-register/close", { registerId: cajaStatus.register.id });
+      setCajaStatus({ isOpen: false, register: null });
+      setTransactions([]);
+      await fetchCajaStatus();
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || "No se pudo cerrar la caja";
+      toast.error("No se puede cerrar la caja", { description: msg });
+      throw err;
+    }
   }
 
   async function handleAddTransaction(transaction) {
@@ -101,6 +135,8 @@ export default function App() {
       total: transaction.total,
       payments: transaction.payments,
       items: transaction.items,
+      saleType: transaction.saleType || "mostrador",
+      tableNumber: transaction.tableNumber ?? null,
     };
     const { data } = await api.post("/transactions", payload);
     const normalized = {
@@ -109,10 +145,29 @@ export default function App() {
       createdAt: data.createdAt,
       time: getTransactionDisplayTime(data),
       total: data.total,
+      saleType: data.saleType || "mostrador",
+      tableNumber: data.tableNumber ?? null,
+      code: data.code || null,
       payments: data.payments.map((p) => ({ type: p.methodName, amount: p.amount })),
       items: data.items.map((i) => ({ name: i.productName, quantity: i.quantity, total: i.total })),
     };
     setTransactions((prev) => [normalized, ...prev]);
+
+    // Limpiar cuenta abierta de esa mesa
+    if (payload.saleType === "mesa" && payload.tableNumber != null) {
+      const n = payload.tableNumber;
+      setCargaMesas((prev) => {
+        const next = { ...prev };
+        delete next[n];
+        return next;
+      });
+      if (mesaSeleccionada === n) setMesaSeleccionada(null);
+      try {
+        const { data: tablesData } = await api.get("/tables");
+        setTables(tablesData || []);
+      } catch { /* ignore */ }
+    }
+
     return normalized;
   }
 
@@ -131,6 +186,9 @@ export default function App() {
     setActiveView("ventas");
     setCajaStatus({ isOpen: false, register: null });
     setTransactions([]);
+    setMesaSeleccionada(null);
+    setCargaMesas({});
+    setTables([]);
   }
 
   // Programar cierre de sesión automático cuando el token expire
@@ -209,6 +267,20 @@ export default function App() {
         <VentasView
           isCajaOpen={cajaStatus.isOpen}
           onAddTransaction={handleAddTransaction}
+        />
+      )}
+      {activeView === "mesas" && (
+        <MesasView
+          isCajaOpen={cajaStatus.isOpen}
+          onAddTransaction={handleAddTransaction}
+          role={user.role}
+          mesaSeleccionada={mesaSeleccionada}
+          setMesaSeleccionada={setMesaSeleccionada}
+          cargaMesas={cargaMesas}
+          setCargaMesas={setCargaMesas}
+          tables={tables}
+          setTables={setTables}
+          onAccountsReload={fetchMesaAccounts}
         />
       )}
       {activeView === "inventario" && user.role === "admin" && <InventarioView />}

@@ -45,6 +45,31 @@ function normalizeDrinkBottleItems(raw) {
     .filter((i) => i.bottleProductId && i.glassesPerBottle > 0);
 }
 
+/** Normaliza precios duales. `price` queda = priceMostrador por compatibilidad. */
+function normalizeDualPrices(data) {
+  const hasMesa = data.priceMesa !== undefined && data.priceMesa !== null && data.priceMesa !== "";
+  const hasMost = data.priceMostrador !== undefined && data.priceMostrador !== null && data.priceMostrador !== "";
+  const legacy = data.price !== undefined && data.price !== null && data.price !== ""
+    ? Number(data.price)
+    : null;
+
+  let priceMesa = hasMesa ? Number(data.priceMesa) : (legacy ?? 0);
+  let priceMostrador = hasMost ? Number(data.priceMostrador) : (legacy ?? 0);
+
+  if (Number.isNaN(priceMesa) || priceMesa < 0) {
+    throw new Error("El precio de mesa debe ser un número ≥ 0");
+  }
+  if (Number.isNaN(priceMostrador) || priceMostrador < 0) {
+    throw new Error("El precio de mostrador debe ser un número ≥ 0");
+  }
+
+  return {
+    priceMesa,
+    priceMostrador,
+    price: priceMostrador,
+  };
+}
+
 async function calcDrinkCostFromIngredients(ingredients) {
   let total = 0;
   for (const ing of ingredients) {
@@ -161,6 +186,9 @@ export async function createProduct(data) {
     }
   }
 
+  const dual = normalizeDualPrices(productData);
+  Object.assign(productData, dual);
+
   const [product] = await db.insert(products).values(productData).returning();
 
   if (items && items.length > 0) {
@@ -224,9 +252,11 @@ export async function updateProduct(id, data) {
     legacyGpb = gpb;
   }
 
+  const dual = normalizeDualPrices(rest);
+
   const productData = {
     name:             rest.name,
-    price:            Number(rest.price),
+    ...dual,
     cost,
     category:         rest.category,
     stock:            isDrink ? 0 : Number(rest.stock ?? 0),
