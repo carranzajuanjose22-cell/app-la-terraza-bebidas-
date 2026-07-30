@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Search, Lock, Wallet, ShoppingCart } from "lucide-react";
+import { Search, Lock, Wallet, ShoppingCart, Store, Armchair, X } from "lucide-react";
 import { ProductCard } from "./ProductCard.jsx";
 import { CartSidebar } from "./CartSidebar.jsx";
 import { PaymentModal } from "./PaymentModal.jsx";
@@ -12,6 +12,10 @@ function unitPriceMostrador(product) {
   return Number(product.priceMostrador ?? product.price) || 0;
 }
 
+function unitPriceMesa(product) {
+  return Number(product.priceMesa ?? product.price) || 0;
+}
+
 export function VentasView({ isCajaOpen, onAddTransaction }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("Todos");
@@ -19,6 +23,7 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [showMobileCart, setShowMobileCart] = useState(false);
+  const [priceChoiceProduct, setPriceChoiceProduct] = useState(null);
   const [products, setProducts] = useState([]);
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -104,18 +109,26 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
     return maxUnits === Infinity ? 0 : maxUnits;
   };
 
+  const qtyInCartForProduct = (productId) =>
+    cartItems.filter((i) => i.id === productId).reduce((s, i) => s + i.quantity, 0);
+
   const filteredProducts = products.filter((product) => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === "Todos" || product.category === selectedCategory;
     return matchesSearch && matchesCategory && product.isAvailable;
   });
 
-  const handleAddToCart = async (product) => {
-    const existing = cartItems.find((item) => item.id === product.id);
-    const currentQty = existing ? existing.quantity : 0;
+  const handleRequestAdd = (product) => {
+    setPriceChoiceProduct(product);
+  };
+
+  const handleAddToCart = async (product, priceType) => {
+    const lineKey = `${product.id}-${priceType}`;
+    const existing = cartItems.find((item) => item.lineKey === lineKey);
+    const totalQtyProduct = qtyInCartForProduct(product.id);
     const recipe = getDrinkRecipe(product);
     const isDrinkGlass = recipe.length > 0;
-    const price = unitPriceMostrador(product);
+    const price = priceType === "mesa" ? unitPriceMesa(product) : unitPriceMostrador(product);
 
     if (isDrinkGlass && recipe.some((ing) => !ing.bottleProductId || ing.glassesPerBottle <= 0 || ing.glassesUsed <= 0)) {
       toast.error("Trago mal configurado");
@@ -147,25 +160,29 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
         maxUnits = Math.min(maxUnits, Math.floor(free / ing.glassesUsed));
       }
       if (maxUnits === Infinity) maxUnits = 0;
-      if (maxUnits < currentQty + 1) {
+      if (maxUnits < 1) {
         toast.error("Sin botella abierta en la barra");
         return;
       }
     } else {
       const stock = Number(product.stock) || 0;
-      if (currentQty >= stock) {
+      if (totalQtyProduct >= stock) {
         toast.error("Sin stock suficiente");
         return;
       }
     }
 
     if (existing) {
-      setCartItems((prev) => prev.map((item) => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item));
+      setCartItems((prev) => prev.map((item) =>
+        item.lineKey === lineKey ? { ...item, quantity: item.quantity + 1 } : item
+      ));
     } else {
       setCartItems((prev) => [...prev, {
+        lineKey,
         id: product.id,
         name: product.name,
         price,
+        priceType,
         stock: product.stock,
         quantity: 1,
         bottleProductId: product.bottleProductId || null,
@@ -173,29 +190,36 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
         drinkBottleItems: recipe,
       }]);
     }
-    toast.success(`${product.name} agregado al carrito`);
+    setPriceChoiceProduct(null);
+    toast.success(`${product.name} agregado`, {
+      description: priceType === "mesa" ? "Precio mesa" : "Precio mostrador",
+    });
   };
 
-  const handleUpdateQuantity = (id, quantity) => {
-    if (quantity <= 0) { handleRemoveItem(id); return; }
-    const item = cartItems.find((i) => i.id === id);
+  const handleUpdateQuantity = (lineKey, quantity) => {
+    if (quantity <= 0) { handleRemoveItem(lineKey); return; }
+    const item = cartItems.find((i) => i.lineKey === lineKey);
     if (!item) return;
     const recipe = getDrinkRecipe(item);
+    const otherQty = cartItems
+      .filter((i) => i.id === item.id && i.lineKey !== lineKey)
+      .reduce((s, i) => s + i.quantity, 0);
+
     if (recipe.length > 0) {
       const maxUnits = getMaxDrinkUnitsAvailable(item, true);
-      if (quantity > maxUnits) {
+      if (quantity + otherQty > maxUnits) {
         toast.error("Sin botellas abiertas suficientes");
         return;
       }
-    } else if (quantity > item.stock) {
+    } else if (quantity + otherQty > item.stock) {
       toast.error("Sin stock suficiente");
       return;
     }
-    setCartItems((prev) => prev.map((i) => i.id === id ? { ...i, quantity } : i));
+    setCartItems((prev) => prev.map((i) => i.lineKey === lineKey ? { ...i, quantity } : i));
   };
 
-  const handleRemoveItem = (id) => {
-    setCartItems((prev) => prev.filter((item) => item.id !== id));
+  const handleRemoveItem = (lineKey) => {
+    setCartItems((prev) => prev.filter((item) => item.lineKey !== lineKey));
     toast.info("Producto eliminado del carrito");
   };
 
@@ -246,6 +270,9 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
     }
   };
 
+  const choiceMostrador = priceChoiceProduct ? unitPriceMostrador(priceChoiceProduct) : 0;
+  const choiceMesa = priceChoiceProduct ? unitPriceMesa(priceChoiceProduct) : 0;
+
   return (
     <div className="flex-1 flex relative overflow-hidden">
       {loading && <Loader />}
@@ -265,8 +292,8 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
         <div className="mb-6 md:mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 md:mb-6 gap-3">
             <div>
-              <h1 className="text-white text-2xl md:text-4xl">Mostrador</h1>
-              <p className="text-gray-400 text-sm mt-1">Venta rápida · precio mostrador</p>
+              <h1 className="text-white text-2xl md:text-4xl">Punto de Venta</h1>
+              <p className="text-gray-400 text-sm mt-1">Al agregar un producto elegís precio mostrador o mesa</p>
             </div>
             {isCajaOpen && (
               <button
@@ -316,9 +343,8 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
               <ProductCard
                 key={product.id}
                 product={product}
-                displayPrice={unitPriceMostrador(product)}
-                priceLabel="Mostrador"
-                onAddToCart={handleAddToCart}
+                showDualPrices
+                onAddToCart={handleRequestAdd}
                 availableGlasses={isDrink ? getMaxDrinkUnitsAvailable(product, true) : null}
               />
             );
@@ -349,6 +375,59 @@ export function VentasView({ isCajaOpen, onAddTransaction }) {
         isMobileOpen={showMobileCart}
         onMobileClose={() => setShowMobileCart(false)}
       />
+
+      {priceChoiceProduct && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#1a1a1a] rounded-2xl w-full max-w-md border border-[#2a2a2a] p-6 shadow-2xl">
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h2 className="text-white text-xl font-bold">¿Con qué precio?</h2>
+                <p className="text-gray-400 text-sm mt-1">{priceChoiceProduct.name}</p>
+              </div>
+              <button
+                onClick={() => setPriceChoiceProduct(null)}
+                className="text-gray-400 hover:text-white p-1"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3">
+              <button
+                onClick={() => handleAddToCart(priceChoiceProduct, "mostrador")}
+                className="flex items-center justify-between gap-3 bg-[#2a2a2a] hover:bg-[#333] border border-[#333] hover:border-[#6B21A8] rounded-xl p-4 text-left transition-all"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-blue-500/15 text-blue-400 flex items-center justify-center">
+                    <Store size={20} />
+                  </div>
+                  <div>
+                    <p className="text-white font-medium">Precio mostrador</p>
+                    <p className="text-gray-500 text-xs">Venta rápida / takeaway</p>
+                  </div>
+                </div>
+                <span className="text-[#8B5CF6] font-bold text-lg">${choiceMostrador.toFixed(2)}</span>
+              </button>
+
+              <button
+                onClick={() => handleAddToCart(priceChoiceProduct, "mesa")}
+                className="flex items-center justify-between gap-3 bg-[#2a2a2a] hover:bg-[#333] border border-[#333] hover:border-amber-500/50 rounded-xl p-4 text-left transition-all"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-amber-500/15 text-amber-400 flex items-center justify-center">
+                    <Armchair size={20} />
+                  </div>
+                  <div>
+                    <p className="text-white font-medium">Precio mesa</p>
+                    <p className="text-gray-500 text-xs">Consumo en salón</p>
+                  </div>
+                </div>
+                <span className="text-amber-400 font-bold text-lg">${choiceMesa.toFixed(2)}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showPaymentModal && paymentMethods.length > 0 && (
         <PaymentModal

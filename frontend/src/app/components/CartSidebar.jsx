@@ -21,21 +21,28 @@ export function CartSidebar({
           <p className="text-sm mt-2">Agrega productos para comenzar</p>
         </div>
       ) : (
-        items.map((item) => (
-          <div key={item.id} className="bg-[#2a2a2a] rounded-lg p-4">
+        items.map((item) => {
+          const key = item.lineKey || item.id;
+          return (
+          <div key={key} className="bg-[#2a2a2a] rounded-lg p-4">
             <div className="flex items-start justify-between mb-3">
               <div className="flex-1 mr-2">
                 <h4 className="text-white text-sm leading-snug">{item.name}</h4>
                 <p className="text-[#8B5CF6] mt-1 text-sm">${Number(item.price).toFixed(2)}</p>
+                {item.priceType && (
+                  <p className="text-gray-500 text-[10px] mt-0.5 uppercase tracking-wide">
+                    {item.priceType === "mesa" ? "Precio mesa" : "Precio mostrador"}
+                  </p>
+                )}
               </div>
-              <button onClick={() => onRemoveItem(item.id)} className="text-gray-400 hover:text-white transition-colors shrink-0">
+              <button onClick={() => onRemoveItem(key)} className="text-gray-400 hover:text-white transition-colors shrink-0">
                 <Trash2 size={18} />
               </button>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 bg-[#1a1a1a] rounded-lg p-1">
                 <button
-                  onClick={() => onUpdateQuantity(item.id, item.quantity - 1)}
+                  onClick={() => onUpdateQuantity(key, item.quantity - 1)}
                   disabled={item.quantity <= 1}
                   className="w-8 h-8 flex items-center justify-center text-white hover:bg-[#333] disabled:opacity-40 disabled:cursor-not-allowed rounded transition-colors"
                 >
@@ -43,7 +50,7 @@ export function CartSidebar({
                 </button>
                 <span className="text-white w-7 text-center text-sm">{item.quantity}</span>
                 <button
-                  onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
+                  onClick={() => onUpdateQuantity(key, item.quantity + 1)}
                   disabled={item.stock != null && item.quantity >= item.stock}
                   className="w-8 h-8 flex items-center justify-center text-white hover:bg-[#333] disabled:opacity-40 disabled:cursor-not-allowed rounded transition-colors"
                 >
@@ -58,7 +65,8 @@ export function CartSidebar({
               </div>
             </div>
           </div>
-        ))
+          );
+        })
       )}
     </div>
   );

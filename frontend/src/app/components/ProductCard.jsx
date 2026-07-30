@@ -2,7 +2,14 @@ import { Plus, ShoppingCart, Wine, Beer, Droplets, Layers, Package } from "lucid
 
 const ICON_MAP = { Wine, Beer, Droplets, Layers, Package };
 
-export function ProductCard({ product, onAddToCart, availableGlasses = null, displayPrice, priceLabel }) {
+export function ProductCard({
+  product,
+  onAddToCart,
+  availableGlasses = null,
+  displayPrice,
+  priceLabel,
+  showDualPrices = false,
+}) {
   const Icon = ICON_MAP[product.icon] || Package;
   const isDrinkGlass = !!product.bottleProductId
     || (Array.isArray(product.drinkBottleItems) && product.drinkBottleItems.length > 0);
@@ -11,6 +18,8 @@ export function ProductCard({ product, onAddToCart, availableGlasses = null, dis
   const bottleCount = product.drinkBottleItems?.length
     || (product.bottleProductId ? 1 : 0);
   const price = displayPrice != null ? displayPrice : product.price;
+  const priceMesa = Number(product.priceMesa ?? product.price) || 0;
+  const priceMostrador = Number(product.priceMostrador ?? product.price) || 0;
 
   return (
     <div className={`bg-[#1e1e1e] border rounded-xl p-3 md:p-4 flex items-center justify-between transition-colors duration-300 ${
@@ -50,12 +59,23 @@ export function ProductCard({ product, onAddToCart, availableGlasses = null, dis
         </div>
       </div>
       <div className="flex items-center gap-3 md:gap-6 ml-2 shrink-0">
-        <div className="text-right">
-          {priceLabel && (
-            <span className="block text-[10px] text-gray-500 uppercase tracking-wide">{priceLabel}</span>
-          )}
-          <span className="text-[#8B5CF6] font-bold text-base md:text-xl">${Number(price).toFixed(2)}</span>
-        </div>
+        {showDualPrices ? (
+          <div className="text-right text-xs md:text-sm space-y-0.5">
+            <p className="text-gray-400">
+              Most. <span className="text-[#8B5CF6] font-bold">${priceMostrador.toFixed(2)}</span>
+            </p>
+            <p className="text-gray-400">
+              Mesa <span className="text-amber-400 font-bold">${priceMesa.toFixed(2)}</span>
+            </p>
+          </div>
+        ) : (
+          <div className="text-right">
+            {priceLabel && (
+              <span className="block text-[10px] text-gray-500 uppercase tracking-wide">{priceLabel}</span>
+            )}
+            <span className="text-[#8B5CF6] font-bold text-base md:text-xl">${Number(price).toFixed(2)}</span>
+          </div>
+        )}
         <button
           onClick={() => onAddToCart(product)}
           className="bg-[#6B21A8] hover:bg-[#581C87] text-white px-3 md:px-4 h-9 md:h-10 rounded-lg flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 shadow-md shadow-[#6B21A8]/20"
