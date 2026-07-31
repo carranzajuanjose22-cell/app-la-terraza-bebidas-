@@ -21,11 +21,23 @@ export async function getProduct(req, res) {
 export async function createProduct(req, res) {
   try {
     const {
-      name, price, cost, category, stock, minStock, icon,
+      name, price, priceMesa, priceMostrador, cost, category, stock, minStock, icon,
       isPromotion, promotionItems, bottleProductId, glassesPerBottle, drinkBottleItems,
     } = req.body;
-    if (!name || price === undefined) {
-      return res.status(400).json({ message: "Nombre y precio son requeridos" });
+
+    if (!name) {
+      return res.status(400).json({ message: "El nombre del producto es requerido" });
+    }
+
+    // Soportar tanto precio único legacy (price) como precios duales (priceMesa/priceMostrador)
+    const resolvedMesa      = priceMesa      !== undefined ? Number(priceMesa)      : (price !== undefined ? Number(price) : undefined);
+    const resolvedMostrador = priceMostrador !== undefined ? Number(priceMostrador) : (price !== undefined ? Number(price) : undefined);
+
+    if (resolvedMesa === undefined || Number.isNaN(resolvedMesa)) {
+      return res.status(400).json({ message: "El precio de mesa es requerido" });
+    }
+    if (resolvedMostrador === undefined || Number.isNaN(resolvedMostrador)) {
+      return res.status(400).json({ message: "El precio de mostrador es requerido" });
     }
 
     const ingredients = Array.isArray(drinkBottleItems) ? drinkBottleItems : [];
@@ -51,7 +63,9 @@ export async function createProduct(req, res) {
 
     const product = await productService.createProduct({
       name,
-      price: Number(price),
+      price: resolvedMostrador,           // compatibilidad legacy → usar mostrador como precio base
+      priceMesa: resolvedMesa,
+      priceMostrador: resolvedMostrador,
       cost: Number(cost || 0),
       category: isPromotion ? "Promocion" : (category || "General"),
       stock: Number(stock || 0),
