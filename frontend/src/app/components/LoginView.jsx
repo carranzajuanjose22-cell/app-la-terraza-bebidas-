@@ -75,25 +75,6 @@ export function LoginView({ onLogin }) {
           </button>
         </form>
 
-        <div className="mt-8 pt-6 border-t border-[#2a2a2a]">
-          <p className="text-gray-500 text-sm text-center mb-4">Acceso rápido (Pruebas):</p>
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={() => { setEmail("admin@terraza.com"); setPassword("admin123"); }}
-              className="flex-1 bg-[#2a2a2a] hover:bg-[#333] text-white py-2 rounded-lg text-sm transition-colors border border-[#333]"
-            >
-              Llenar Admin
-            </button>
-            <button
-              type="button"
-              onClick={() => { setEmail("cajero@terraza.com"); setPassword("caja123"); }}
-              className="flex-1 bg-[#2a2a2a] hover:bg-[#333] text-white py-2 rounded-lg text-sm transition-colors border border-[#333]"
-            >
-              Llenar Cajero
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );
